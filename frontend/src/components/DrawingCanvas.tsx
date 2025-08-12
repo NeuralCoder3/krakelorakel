@@ -1,12 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
+import { io, Socket } from 'socket.io-client'
 
-interface DrawingCanvasProps { }
+interface DrawingCanvasProps {}
 
 const DEBUG = false;
 
 const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const backgroundImageRef = useRef<HTMLImageElement>(null)
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(5)
   const [brushColor, setBrushColor] = useState('#000000')
@@ -19,6 +20,54 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [currentWord, setCurrentWord] = useState('')
   const [wordCategory, setWordCategory] = useState('')
   const [boardImageUrl, setBoardImageUrl] = useState('')
+  
+  // Multiplayer state
+  const [socket, setSocket] = useState<Socket | null>(null)
+  const [playerCount, setPlayerCount] = useState(0)
+  const [playerList, setPlayerList] = useState<any[]>([])
+  const [allSubmitted, setAllSubmitted] = useState(false)
+  const [gameResults, setGameResults] = useState<any>(null)
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [playerName, setPlayerName] = useState('')
+  const [isConnected, setIsConnected] = useState(false)
+  const [showPlayerDetails, setShowPlayerDetails] = useState(false)
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    const newSocket = io('http://localhost:5000')
+    setSocket(newSocket)
+
+    newSocket.on('playerCount', (count: number) => {
+      setPlayerCount(count)
+    })
+
+    newSocket.on('playerList', (players: any[]) => {
+      setPlayerList(players)
+    })
+
+    newSocket.on('allSubmitted', (submitted: boolean) => {
+      setAllSubmitted(submitted)
+    })
+
+    newSocket.on('gameResults', (results: any) => {
+      setGameResults(results)
+    })
+
+    return () => {
+      newSocket.close()
+    }
+  }, [])
+
+  // Reset game data when not connected
+  useEffect(() => {
+    if (!isConnected) {
+      setCurrentWord('')
+      setWordCategory('')
+      setBoardImageUrl('')
+      setImageLoaded(false)
+      setDistances([])
+    }
+  }, [isConnected])
 
   // Load initial game data from server
   useEffect(() => {
@@ -53,8 +102,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       }
     }
     
-    loadGameData()
-  }, [])
+    // Only load game data when connected
+    if (isConnected) {
+      loadGameData()
+    }
+  }, [isConnected])
 
   // Load background image
   useEffect(() => {
@@ -365,127 +417,230 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     link.click()
   }, [])
 
+  // Submit drawing function
+  const submitDrawing = useCallback(() => {
+    if (!socket || !canvasRef.current) return
+    
+    const canvas = canvasRef.current
+    const drawingData = canvas.toDataURL('image/png')
+    
+    socket.emit('submitDrawing', { 
+      drawing: drawingData,
+      originalWord: currentWord // Send the word they were supposed to draw
+    })
+    setIsSubmitted(true)
+  }, [socket, currentWord])
+
+  // Unsubmit drawing function
+  const unsubmitDrawing = useCallback(() => {
+    if (!socket) return
+    
+    socket.emit('unsubmitDrawing')
+    setIsSubmitted(false)
+  }, [socket])
+
   const presetColors = [
     '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
     '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#800080',
     '#008000', '#ffc0cb', '#a52a2a', '#808080', '#000080'
   ]
 
-  if (!imageLoaded) {
-    return (
-      <div className="drawing-canvas-container">
-        <div className="loading-message">
-          <p>🔄 Loading background image...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="drawing-canvas-container">
-      {/* Word Display Section */}
-      <div className="word-display">
-        <div className="word-info">
-          <div className="word-category">
-            <span className="category-icon">
-              {wordCategory === 'animals' && '🐾'}
-              {wordCategory === 'objects' && '🔧'}
-              {wordCategory === 'nature' && '🌿'}
-              {wordCategory === 'food' && '🍕'}
-              {wordCategory === 'fantasy' && '✨'}
-              {wordCategory === 'general' && '🎯'}
-            </span>
-            <span className="category-text">{wordCategory}</span>
-          </div>
-          <div className="current-word">
-            <h3>Draw this:</h3>
-            <div className="word-text">{currentWord}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="canvas-toolbar">
-        {DEBUG && (
-        <div className="tool-group">
-          <label htmlFor="brush-size">Brush Size:</label>
-          <input
-            id="brush-size"
-            type="range"
-            min="1"
-            max="50"
-            value={brushSize}
-            onChange={(e) => setBrushSize(Number(e.target.value))}
-            className="brush-size-slider"
-          />
-          <span className="brush-size-value">{brushSize}px</span>
-        </div>
-        )}
-
-        {DEBUG && (
-        <div className="tool-group">
-          <label htmlFor="brush-color">Color:</label>
-          <input
-            id="brush-color"
-            type="color"
-            value={brushColor}
-            onChange={(e) => setBrushColor(e.target.value)}
-            className="color-picker"
-          />
-        </div>
-        )}
-
-        {DEBUG && (
-          <div className="tool-group">
-            <label htmlFor="min-dist">Min Distance:</label>
+      {/* Player Name Input */}
+      {!isConnected && (
+        <div className="player-name-input">
+          <h3>🎮 Join the Game</h3>
+          <div className="name-input-group">
             <input
-              id="min-dist"
+              type="text"
+              placeholder="Enter your name..."
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              className="name-input"
+              maxLength={20}
+            />
+            <button
+              className="join-button"
+              onClick={() => {
+                if (playerName.trim()) {
+                  setIsConnected(true)
+                  if (socket) {
+                    socket.emit('setPlayerName', { name: playerName.trim() })
+                  }
+                }
+              }}
+              disabled={!playerName.trim()}
+            >
+              🚀 Join Game
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Multiplayer Status - Only show when connected */}
+      {isConnected && (
+        <div className="multiplayer-status">
+          <div className="player-counter">
+            <span className="counter-icon">👥</span>
+            <span className="counter-text">{playerCount} Players Connected</span>
+          </div>
+          <div className="submission-status">
+            {allSubmitted ? (
+              <div className="all-submitted">
+                <span className="status-icon">🎉</span>
+                <span className="status-text">All drawings submitted!</span>
+              </div>
+            ) : (
+              <div 
+                className="waiting-submissions clickable"
+                onClick={() => setShowPlayerDetails(!showPlayerDetails)}
+                title="Click to see player details"
+              >
+                <span className="status-icon">⏳</span>
+                <span className="status-text">
+                  {playerList.filter(p => p.submitted).length} of {playerCount} submitted
+                </span>
+              </div>
+            )}
+          </div>
+          
+          {/* Player Details Modal */}
+          {showPlayerDetails && (
+            <div className="player-details-modal">
+              <div className="modal-header">
+                <h4>Player Status</h4>
+                <button 
+                  className="close-button"
+                  onClick={() => setShowPlayerDetails(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="player-list">
+                {playerList.map((player) => (
+                  <div key={player.id} className={`player-item ${player.submitted ? 'submitted' : 'not-submitted'}`}>
+                    <span className="player-name">{player.name}</span>
+                    <span className="player-status">
+                      {player.submitted ? '✅ Submitted' : '⏳ Waiting'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Word Display Section - Show when connected */}
+      {isConnected && (
+        <div className="word-display">
+          <div className="word-info">
+            <div className="word-category">
+              <span className="category-icon">
+                {wordCategory === 'animals' && '🐾'}
+                {wordCategory === 'objects' && '🔧'}
+                {wordCategory === 'nature' && '🌿'}
+                {wordCategory === 'food' && '🍕'}
+                {wordCategory === 'fantasy' && '✨'}
+                {wordCategory === 'general' && '🎯'}
+              </span>
+              <span className="category-text">{wordCategory}</span>
+            </div>
+            <div className="current-word">
+              <h3>Draw this:</h3>
+              <div className="word-text">{currentWord}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Canvas Toolbar - Show when connected */}
+      {isConnected && (
+        <div className="canvas-toolbar">
+          {DEBUG && (
+          <div className="tool-group">
+            <label htmlFor="brush-size">Brush Size:</label>
+            <input
+              id="brush-size"
               type="range"
               min="1"
               max="50"
-              value={minDist}
-              onChange={(e) => setMinDist(Number(e.target.value))}
-              className="min-dist-slider"
+              value={brushSize}
+              onChange={(e) => setBrushSize(Number(e.target.value))}
+              className="brush-size-slider"
             />
-            <span className="min-dist-value">{minDist}px</span>
+            <span className="brush-size-value">{brushSize}px</span>
           </div>
-        )}
+          )}
 
-        <div className="tool-group">
-          <button
-            className={`tool-button ${!isEraser ? 'active' : ''}`}
-            onClick={() => setIsEraser(false)}
-            title="Brush Tool"
-          >
-            🖌️
-          </button>
-          <button
-            className={`tool-button ${isEraser ? 'active' : ''}`}
-            onClick={() => setIsEraser(true)}
-            title="Eraser Tool"
-          >
-            🧽
-          </button>
+          {DEBUG && (
+          <div className="tool-group">
+            <label htmlFor="brush-color">Color:</label>
+            <input
+              id="brush-color"
+              type="color"
+              value={brushColor}
+              onChange={(e) => setBrushColor(e.target.value)}
+              className="color-picker"
+            />
+          </div>
+          )}
+
+          {DEBUG && (
+            <div className="tool-group">
+              <label htmlFor="min-dist">Min Distance:</label>
+              <input
+                id="min-dist"
+                type="range"
+                min="1"
+                max="50"
+                value={minDist}
+                onChange={(e) => setMinDist(Number(e.target.value))}
+                className="min-dist-slider"
+              />
+              <span className="min-dist-value">{minDist}px</span>
+            </div>
+          )}
+
+          <div className="tool-group">
+            <button
+              className={`tool-button ${!isEraser ? 'active' : ''}`}
+              onClick={() => setIsEraser(false)}
+              title="Brush Tool"
+            >
+              🖌️
+            </button>
+            <button
+              className={`tool-button ${isEraser ? 'active' : ''}`}
+              onClick={() => setIsEraser(true)}
+              title="Eraser Tool"
+            >
+              🧽
+            </button>
+          </div>
+
+          <div className="tool-group">
+            <button
+              className="tool-button clear-button"
+              onClick={clearCanvas}
+              title="Clear Canvas"
+            >
+              🗑️
+            </button>
+            <button
+              className="tool-button download-button"
+              onClick={downloadCanvas}
+              title="Download Drawing"
+            >
+              💾
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="tool-group">
-          <button
-            className="tool-button clear-button"
-            onClick={clearCanvas}
-            title="Clear Canvas"
-          >
-            🗑️
-          </button>
-          <button
-            className="tool-button download-button"
-            onClick={downloadCanvas}
-            title="Download Drawing"
-          >
-            💾
-          </button>
-        </div>
-      </div>
-
-      {DEBUG && (
+      {/* Color Palette - Show when connected */}
+      {isConnected && DEBUG && (
         <div className="color-palette">
           {presetColors.map((color) => (
             <button
@@ -499,21 +654,95 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         </div>
       )}
 
-      <div className="canvas-wrapper">
-        <canvas
-          ref={canvasRef}
-          className="drawing-canvas"
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-        />
-      </div>
+      {/* Canvas - Only show when connected */}
+      {isConnected && (
+        <div className="canvas-wrapper">
+          {!imageLoaded ? (
+            <div className="loading-message">
+              <p>Loading background image...</p>
+            </div>
+          ) : (
+            <canvas
+              ref={canvasRef}
+              className="drawing-canvas"
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+            />
+          )}
+        </div>
+      )}
 
-      <div className="canvas-info">
-        <p>🎨 Draw only within {minDist}px of the board lines! The canvas restricts drawing to valid areas.</p>
-        <p>💡 Tip: Adjust the Min Distance slider to control where you can draw on the board.</p>
-      </div>
+      {/* Canvas Info - Show when connected */}
+      {isConnected && (
+        <div className="canvas-info">
+          <p>🎨 Draw only within {minDist}px of the board lines! The canvas restricts drawing to valid areas.</p>
+        </div>
+      )}
+
+      {/* Submission Controls - Only show when connected */}
+      {isConnected && (
+        <div className="submission-controls">
+          {!isSubmitted ? (
+            <button
+              className="submit-button"
+              onClick={submitDrawing}
+              disabled={!imageLoaded}
+              title="Submit your drawing"
+            >
+              ✅ Submit Drawing
+            </button>
+          ) : (
+            <button
+              className="unsubmit-button"
+              onClick={unsubmitDrawing}
+              disabled={allSubmitted}
+              title="Unsubmit your drawing (until all players submit)"
+            >
+              🔄 Unsubmit Drawing
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Game Results - Show regardless of connection status */}
+      {gameResults && (
+        <div className="game-results">
+          <h3>🎯 Game Results</h3>
+          <div className="results-content">
+            <div className="drawings-section">
+              <h4>All Drawings:</h4>
+              <div className="drawings-grid">
+                {gameResults.drawings.map((drawing: any, index: number) => (
+                  <div key={index} className="drawing-item">
+                    <img 
+                      src={drawing.drawing} 
+                      alt={`Drawing ${index + 1}`}
+                      className="result-drawing"
+                    />
+                    <p className="drawing-label">Player {index + 1}</p>
+                    {drawing.originalWord && <p className="original-word">Was supposed to draw: <strong>{drawing.originalWord}</strong></p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="words-section">
+              <h4>All Words in the Game:</h4>
+              <div className="words-list">
+                {gameResults.allWords.map((word: string, index: number) => (
+                  <span key={index} className="word-tag">
+                    {word}
+                  </span>
+                ))}
+              </div>
+              <p className="words-note">
+                <em>Includes original words each player was supposed to draw + additional words for voting</em>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
