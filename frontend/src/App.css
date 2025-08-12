@@ -103,26 +103,6 @@
   letter-spacing: 1px;
 }
 
-.new-word-button {
-  background: rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 25px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-
-.new-word-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-}
-
 .loading-message {
   display: flex;
   justify-content: center;
@@ -340,11 +320,6 @@
   
   .word-text {
     font-size: 1.5rem;
-  }
-  
-  .new-word-button {
-    width: 100%;
-    max-width: 200px;
   }
   
   .canvas-toolbar {

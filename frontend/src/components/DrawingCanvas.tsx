@@ -18,42 +18,60 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [currentWord, setCurrentWord] = useState('')
   const [wordCategory, setWordCategory] = useState('')
+  const [boardImageUrl, setBoardImageUrl] = useState('')
 
-  // Sample words for different categories
-  const wordLists = {
-    animals: ['cat', 'dog', 'elephant', 'lion', 'tiger', 'bear', 'wolf', 'fox', 'deer', 'rabbit', 'squirrel', 'bird', 'fish', 'horse', 'cow', 'pig', 'sheep', 'goat', 'chicken', 'duck'],
-    objects: ['car', 'house', 'tree', 'flower', 'book', 'phone', 'computer', 'chair', 'table', 'bed', 'lamp', 'clock', 'cup', 'plate', 'fork', 'knife', 'spoon', 'bottle', 'bag', 'shoes'],
-    nature: ['mountain', 'river', 'ocean', 'forest', 'beach', 'sun', 'moon', 'stars', 'clouds', 'rain', 'snow', 'grass', 'rocks', 'cave', 'volcano', 'island', 'desert', 'lake', 'waterfall', 'bridge'],
-    food: ['apple', 'banana', 'orange', 'pizza', 'hamburger', 'hotdog', 'ice cream', 'cake', 'bread', 'cheese', 'milk', 'eggs', 'rice', 'pasta', 'soup', 'salad', 'steak', 'chicken', 'fish', 'vegetables'],
-    fantasy: ['dragon', 'unicorn', 'wizard', 'witch', 'fairy', 'castle', 'knight', 'princess', 'king', 'queen', 'magic wand', 'crystal ball', 'flying carpet', 'treasure chest', 'monster', 'ghost', 'vampire', 'werewolf', 'mermaid', 'phoenix']
-  }
-
-  // Get a random word from a random category
-  const getRandomWord = useCallback(() => {
-    const categories = Object.keys(wordLists)
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)]
-    const words = wordLists[randomCategory as keyof typeof wordLists]
-    const randomWord = words[Math.floor(Math.random() * words.length)]
-    
-    setCurrentWord(randomWord)
-    setWordCategory(randomCategory)
-  }, [])
-
-  // Initialize with a random word
+  // Load initial game data from server
   useEffect(() => {
-    getRandomWord()
-  }, [getRandomWord])
+    const loadGameData = async () => {
+      try {
+        console.log('Loading game data from server...')
+        
+        // Load word
+        const wordResponse = await fetch('/api/game/word')
+        console.log('Word response status:', wordResponse.status)
+        if (wordResponse.ok) {
+          const wordData = await wordResponse.json()
+          console.log('Word data received:', wordData)
+          setCurrentWord(wordData.word)
+          setWordCategory(wordData.category)
+        } else {
+          console.error('Failed to get word from server:', wordResponse.status)
+        }
+        
+        // Load board
+        const boardResponse = await fetch('/api/game/board/random')
+        console.log('Board response status:', boardResponse.status)
+        if (boardResponse.ok) {
+          const boardData = await boardResponse.json()
+          console.log('Board data received:', boardData)
+          setBoardImageUrl(boardData.url)
+        } else {
+          console.error('Failed to get board from server:', boardResponse.status)
+        }
+      } catch (error) {
+        console.error('Error loading game data:', error)
+      }
+    }
+    
+    loadGameData()
+  }, [])
 
   // Load background image
   useEffect(() => {
+    if (!boardImageUrl) return // Don't load if no URL yet
+    
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       backgroundImageRef.current = img
       setImageLoaded(true)
     }
-    img.src = '/board1.jpg'
-  }, [])
+    img.onerror = () => {
+      console.error('Failed to load background image:', boardImageUrl)
+      setImageLoaded(false)
+    }
+    img.src = boardImageUrl
+  }, [boardImageUrl])
 
   // Initialize canvas and compute distances
   useEffect(() => {
@@ -375,6 +393,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               {wordCategory === 'nature' && '🌿'}
               {wordCategory === 'food' && '🍕'}
               {wordCategory === 'fantasy' && '✨'}
+              {wordCategory === 'general' && '🎯'}
             </span>
             <span className="category-text">{wordCategory}</span>
           </div>
@@ -383,13 +402,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
             <div className="word-text">{currentWord}</div>
           </div>
         </div>
-        <button 
-          className="new-word-button"
-          onClick={getRandomWord}
-          title="Get a new word to draw"
-        >
-          🎲 New Word
-        </button>
       </div>
 
       <div className="canvas-toolbar">
