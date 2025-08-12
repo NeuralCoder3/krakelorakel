@@ -54,6 +54,22 @@
   gap: 1rem;
 }
 
+.loading-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  background: #f8f9fa;
+  border-radius: 15px;
+  border: 1px solid #e9ecef;
+}
+
+.loading-message p {
+  font-size: 1.2rem;
+  color: #495057;
+  font-weight: 600;
+}
+
 .canvas-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -77,7 +93,8 @@
   font-size: 0.9rem;
 }
 
-.brush-size-slider {
+.brush-size-slider,
+.min-dist-slider {
   width: 100px;
   height: 6px;
   border-radius: 3px;
@@ -86,7 +103,8 @@
   -webkit-appearance: none;
 }
 
-.brush-size-slider::-webkit-slider-thumb {
+.brush-size-slider::-webkit-slider-thumb,
+.min-dist-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
@@ -97,7 +115,8 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.brush-size-slider::-moz-range-thumb {
+.brush-size-slider::-moz-range-thumb,
+.min-dist-slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -107,7 +126,8 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.brush-size-value {
+.brush-size-value,
+.min-dist-value {
   font-weight: 600;
   color: #495057;
   min-width: 40px;
@@ -205,6 +225,7 @@
   border: 1px solid #e9ecef;
   padding: 1rem;
   min-height: 500px;
+  overflow: auto;
 }
 
 .drawing-canvas {
