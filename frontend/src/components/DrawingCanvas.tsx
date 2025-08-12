@@ -64,10 +64,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     })
 
     newSocket.on('votingStarted', (data: any) => {
+      console.log('Voting phase started with data:', data)
+      console.log('All words for voting:', data.allWords)
       setVotingPhase(data)
       setCurrentPlayerTurn(data)
       setVotedWords([])
-      console.log('Voting phase started:', data)
     })
 
     newSocket.on('wordVotedOut', (data: any) => {
@@ -101,6 +102,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       console.log('New word assigned:', data.word)
     })
 
+    newSocket.on('wordAssigned', (data: { word: string }) => {
+      setCurrentWord(data.word)
+      console.log('Word assigned on join:', data.word)
+    })
+
     return () => {
       newSocket.close()
     }
@@ -123,17 +129,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       try {
         console.log('Loading game data from server...')
         
-        // Load word
-        const wordResponse = await fetch('/api/game/word')
-        console.log('Word response status:', wordResponse.status)
-        if (wordResponse.ok) {
-          const wordData = await wordResponse.json()
-          console.log('Word data received:', wordData)
-          setCurrentWord(wordData.word)
-          setWordCategory(wordData.category)
-        } else {
-          console.error('Failed to get word from server:', wordResponse.status)
-        }
+        // Note: Words are now assigned by the backend when players join
+        // We don't need to fetch them from the API anymore
         
         // Load board
         const boardResponse = await fetch('/api/game/board/random')
@@ -913,20 +910,24 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               <div className="drawings-grid">
                 {gameResults.drawings.map((drawing: any, index: number) => (
                   <div key={index} className="drawing-item">
-                    <img 
-                      src={drawing.drawing} 
-                      alt={`Drawing ${index + 1}`}
-                      className="result-drawing"
-                      style={{
-                        transform: `rotate(${drawing.rotation || 0}deg)`,
-                        transformOrigin: 'center center'
-                      }}
-                    />
-                    <p className="drawing-label">Player {index + 1}</p>
-                    {drawing.rotation !== undefined && drawing.rotation !== 0 && (
-                      <p className="rotation-info">Rotation: {drawing.rotation}°</p>
-                    )}
-                    {drawing.originalWord && <p className="original-word">Was supposed to draw: <strong>{drawing.originalWord}</strong></p>}
+                    <div className="drawing-image-container">
+                      <img 
+                        src={drawing.drawing} 
+                        alt={`Drawing ${index + 1}`}
+                        className="result-drawing"
+                        style={{
+                          transform: `rotate(${drawing.rotation || 0}deg)`,
+                          transformOrigin: 'center center'
+                        }}
+                      />
+                    </div>
+                    <div className="drawing-info">
+                      <p className="drawing-label">Player {index + 1}</p>
+                      {drawing.rotation !== undefined && drawing.rotation !== 0 && (
+                        <p className="rotation-info">Rotation: {drawing.rotation}°</p>
+                      )}
+                      {drawing.originalWord && <p className="original-word">Was supposed to draw: <strong>{drawing.originalWord}</strong></p>}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -954,25 +955,31 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
                 <div className="words-voting">
                   <h5>Vote out a word that you think is NOT shown in the drawings:</h5>
                   <div className="words-list">
-                    {gameResults.allWords.map((word: string) => (
-                      <button
-                        key={word}
-                        className={`word-tag ${votedWords.includes(word) ? 'voted-out' : ''} ${
-                          currentPlayerTurn?.currentPlayerId === socket?.id ? 'clickable' : 'disabled'
-                        }`}
-                        onClick={() => voteWord(word)}
-                        disabled={votedWords.includes(word) || currentPlayerTurn?.currentPlayerId !== socket?.id}
-                        title={
-                          votedWords.includes(word) 
-                            ? `Voted out by ${votingPhase.playerVotes?.[word] || 'unknown'}`
-                            : currentPlayerTurn?.currentPlayerId === socket?.id
-                            ? 'Click to vote out this word'
-                            : 'Wait for your turn'
-                        }
-                      >
-                        {word}
-                      </button>
-                    ))}
+                    {votingPhase?.allWords ? (
+                      votingPhase.allWords.map((word: string) => (
+                        <button
+                          key={word}
+                          className={`word-tag ${votedWords.includes(word) ? 'voted-out' : ''} ${
+                            currentPlayerTurn?.currentPlayerId === socket?.id ? 'clickable' : 'disabled'
+                          }`}
+                          onClick={() => voteWord(word)}
+                          disabled={votedWords.includes(word) || currentPlayerTurn?.currentPlayerId !== socket?.id}
+                          title={
+                            votedWords.includes(word) 
+                              ? `Voted out by ${votingPhase.playerVotes?.[word] || 'unknown'}`
+                              : currentPlayerTurn?.currentPlayerId === socket?.id
+                              ? 'Click to vote out this word'
+                              : 'Wait for your turn'
+                          }
+                        >
+                          {word}
+                        </button>
+                      ))
+                    ) : (
+                      <div style={{color: 'red', padding: '10px'}}>
+                        No words available for voting. votingPhase: {JSON.stringify(votingPhase)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

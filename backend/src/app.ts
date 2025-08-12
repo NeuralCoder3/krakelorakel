@@ -108,9 +108,14 @@ io.on('connection', (socket) => {
       player.name = data.name;
       player.joined = true;
       
-      // Note: We don't assign a word here - the frontend gets it from /api/game/word
-      // We'll store the word when the player submits their drawing
-      console.log(`Player joined: ${data.name} (${socket.id})`);
+      // Assign a random word to this player when they join
+      const newWords = getRandomWords(1);
+      player.originalWord = newWords[0];
+      
+      console.log(`Player joined: ${data.name} (${socket.id}) with word: ${player.originalWord}`);
+      
+      // Send the assigned word to this player
+      socket.emit('wordAssigned', { word: player.originalWord });
       
       // Broadcast updated player count (only joined players)
       const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
@@ -175,12 +180,15 @@ io.on('connection', (socket) => {
         };
         
         // Start voting phase
-        io.emit('votingStarted', {
+        const votingData = {
           currentPlayerId: joinedPlayers[0].id,
           currentPlayerName: joinedPlayers[0].name,
           totalPlayers: joinedPlayers.length,
           allWords: gameState.gameResults.allWords
-        });
+        };
+        console.log('Starting voting phase with data:', votingData);
+        console.log('allWords array:', gameState.gameResults.allWords);
+        io.emit('votingStarted', votingData);
       }
       
       // Broadcast updated submission status
