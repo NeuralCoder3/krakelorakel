@@ -33,6 +33,7 @@ interface Player {
   drawing?: string; // base64 encoded drawing
   joined: boolean; // whether player has actually joined the game
   originalWord?: string; // the word they were supposed to draw (tracked by server)
+  rotation?: number; // rotation data for the drawing
 }
 
 interface GameState {
@@ -119,14 +120,15 @@ io.on('connection', (socket) => {
   });
   
   // Handle player submission
-  socket.on('submitDrawing', (data: { drawing: string; originalWord: string }) => {
+  socket.on('submitDrawing', (data: { drawing: string; rotation: number }) => {
     const player = gameState.players.get(socket.id);
     if (player && player.joined) {
       player.submitted = true;
       player.drawing = data.drawing;
-      player.originalWord = data.originalWord; // Store the word they were supposed to draw
+      player.rotation = data.rotation; // Store rotation data
+      // player.originalWord is already set by the server when player joins
       
-      console.log(`Player ${player.name} submitted drawing for word: ${player.originalWord}`);
+      console.log(`Player ${player.name} submitted drawing with rotation: ${data.rotation}°`);
       
       // Check if all joined players submitted
       const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
@@ -142,6 +144,7 @@ io.on('connection', (socket) => {
           .map(p => ({ 
             playerId: p.id, 
             drawing: p.drawing!, 
+            rotation: p.rotation || 0, // Include rotation data
             ...(DEBUG && { originalWord: p.originalWord }) // Only include detailed field if DEBUG is active
           }));
         

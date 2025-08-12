@@ -13,12 +13,13 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [isEraser, setIsEraser] = useState(false)
   const [lastX, setLastX] = useState(0)
   const [lastY, setLastY] = useState(0)
-  const [minDist, setMinDist] = useState(3)
+  const [minDist, setMinDist] = useState(2)
   const [distances, setDistances] = useState<number[][]>([])
   const [imageLoaded, setImageLoaded] = useState(false)
   const [currentWord, setCurrentWord] = useState('')
   const [wordCategory, setWordCategory] = useState('')
   const [boardImageUrl, setBoardImageUrl] = useState('')
+  const [rotation, setRotation] = useState(0) // Canvas rotation in degrees
   
   // Canvas refs
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -183,15 +184,27 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
-    // Set canvas size to match image
-    canvas.width = img.width
-    canvas.height = img.height
+    // Set canvas size to match image but with reasonable limits
+    const maxSize = 600
+    const scale = Math.min(maxSize / img.width, maxSize / img.height)
+    canvas.width = img.width * scale
+    canvas.height = img.height * scale
     
-    // Draw background image
-    ctx.drawImage(img, 0, 0)
+    // Draw background image scaled to fit
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     
-    // Compute distances using dynamic programming
-    const computedDistances = computeDistances(img)
+    // Compute distances using dynamic programming on the SCALED image
+    // Create a temporary canvas with the scaled dimensions
+    const tempCanvas = document.createElement('canvas')
+    const tempCtx = tempCanvas.getContext('2d')
+    if (!tempCtx) return
+    
+    tempCanvas.width = canvas.width
+    tempCanvas.height = canvas.height
+    tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    
+    // Compute distances on the scaled image
+    const computedDistances = computeDistances(tempCanvas)
     setDistances(computedDistances)
     
     // Set canvas style for drawing
@@ -200,7 +213,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   }, [imageLoaded])
 
   // Dynamic programming distance computation (2-pass algorithm)
-  const computeDistances = useCallback((img: HTMLImageElement): number[][] => {
+  const computeDistances = useCallback((img: HTMLImageElement | HTMLCanvasElement): number[][] => {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     if (!ctx) return []
@@ -262,13 +275,100 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
   // Check if a point is within drawing distance
   const isWithinDrawingDistance = useCallback((x: number, y: number): boolean => {
-    if (distances.length === 0 || y < 0 || y >= distances.length || x < 0 || x >= distances[0].length) {
+    // Ensure coordinates are integers and within bounds
+    const intX = Math.floor(x)
+    const intY = Math.floor(y)
+    
+    if (distances.length === 0) {
+      console.warn('Distances array is empty')
       return false
     }
-    return distances[y][x] <= minDist
+    
+    console.log(`Checking distance at [${intX}, ${intY}] - Distances array: ${distances.length}x${distances[0]?.length || 'unknown'}`)
+    
+    if (intY < 0 || intY >= distances.length) {
+      console.warn(`Y coordinate ${intY} out of bounds [0, ${distances.length - 1}]`)
+      return false
+    }
+    
+    if (intX < 0 || intX >= distances[intY].length) {
+      console.warn(`X coordinate ${intX} out of bounds [0, ${distances[intY].length - 1}]`)
+      return false
+    }
+    
+    const distance = distances[intY][intX]
+    if (distance === undefined) {
+      console.warn(`Distance at [${intX}, ${intY}] is undefined`)
+      return false
+    }
+    
+    console.log(`Distance at [${intX}, ${intY}]: ${distance} (minDist: ${minDist})`)
+    return distance <= minDist
   }, [distances, minDist])
 
-
+  // Transform coordinates from screen space to canvas space considering rotation
+  const transformCoordinates = useCallback((screenX: number, screenY: number) => {
+    if (!canvasRef.current) return { x: 0, y: 0 }
+    
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    
+    // If no rotation, return simple coordinates
+    if (rotation === 0) {
+      const canvasX = screenX - rect.left
+      const canvasY = screenY - rect.top
+      
+      const result = { 
+        x: Math.max(0, Math.min(canvas.width - 1, canvasX)), 
+        y: Math.max(0, Math.min(canvas.height - 1, canvasY)) 
+      }
+      console.log(`No rotation - Screen: (${screenX}, ${screenY}) -> Canvas: (${result.x}, ${result.y})`)
+      return result
+    }
+    
+    // For rotation, we need to handle the fact that the canvas is visually rotated
+    // but we want to map coordinates to the unrotated canvas coordinate system
+    
+    // Get the container dimensions (this should be the unrotated container)
+    const containerWidth = rect.width
+    const containerHeight = rect.height
+    
+    // Calculate the position relative to the container center (unrotated)
+    const containerCenterX = containerWidth / 2
+    const containerCenterY = containerHeight / 2
+    
+    // Get mouse position relative to container
+    const mouseX = screenX - rect.left
+    const mouseY = screenY - rect.top
+    
+    // Calculate position relative to container center
+    const relativeX = mouseX - containerCenterX
+    const relativeY = mouseY - containerCenterY
+    
+    // Apply inverse rotation to get unrotated coordinates
+    const radians = (-rotation * Math.PI) / 180
+    const cos = Math.cos(radians)
+    const sin = Math.sin(radians)
+    
+    const unrotatedX = relativeX * cos - relativeY * sin
+    const unrotatedY = relativeX * sin + relativeY * cos
+    
+    // Convert to canvas coordinates
+    // The canvas is centered in the container, so add the canvas center
+    const canvasCenterX = canvas.width / 2
+    const canvasCenterY = canvas.height / 2
+    
+    const finalX = unrotatedX + canvasCenterX
+    const finalY = unrotatedY + canvasCenterY
+    
+    // Ensure coordinates are within canvas bounds
+    const clampedX = Math.max(0, Math.min(canvas.width - 1, Math.round(finalX)))
+    const clampedY = Math.max(0, Math.min(canvas.height - 1, Math.round(finalY)))
+    
+    const result = { x: clampedX, y: clampedY }
+    console.log(`Rotation ${rotation}° - Screen: (${screenX}, ${screenY}) -> Container: (${mouseX}, ${mouseY}) -> Canvas: (${result.x}, ${result.y})`)
+    return result
+  }, [rotation])
 
   // Find valid line segments and draw only those parts
   const findAndDrawValidSegments = useCallback((x1: number, y1: number, x2: number, y2: number) => {
@@ -410,15 +510,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     const canvas = canvasRef.current
     if (!canvas) return
     
-    const rect = canvas.getBoundingClientRect()
-    const x = Math.floor(e.clientX - rect.left)
-    const y = Math.floor(e.clientY - rect.top)
+    // Transform coordinates considering rotation
+    const { x, y } = transformCoordinates(e.clientX, e.clientY)
     
     // Always allow starting to draw, even from invalid areas
     setIsDrawing(true)
     setLastX(x)
     setLastY(y)
-  }, [])
+  }, [transformCoordinates])
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return
@@ -426,9 +525,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     const canvas = canvasRef.current
     if (!canvas) return
     
-    const rect = canvas.getBoundingClientRect()
-    const x = Math.floor(e.clientX - rect.left)
-    const y = Math.floor(e.clientY - rect.top)
+    // Transform coordinates considering rotation
+    const { x, y } = transformCoordinates(e.clientX, e.clientY)
     
     // Find and draw only valid segments
     const drawn = findAndDrawValidSegments(lastX, lastY, x, y)
@@ -437,10 +535,19 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       setLastX(x)
       setLastY(y)
     }
-  }, [isDrawing, lastX, lastY, findAndDrawValidSegments])
+  }, [isDrawing, lastX, lastY, findAndDrawValidSegments, transformCoordinates])
 
   const stopDrawing = useCallback(() => {
     setIsDrawing(false)
+  }, [])
+
+  // Rotation functions
+  const rotateCanvas = useCallback((degrees: number) => {
+    setRotation(degrees)
+  }, [])
+
+  const resetRotation = useCallback(() => {
+    setRotation(0)
   }, [])
 
   // Clear canvas function
@@ -478,12 +585,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     const canvas = canvasRef.current
     const drawingData = canvas.toDataURL('image/png')
     
-    socket.emit('submitDrawing', { 
+    socket.emit('submitDrawing', {
       drawing: drawingData,
-      originalWord: currentWord // Send the word they were supposed to draw
+      rotation: rotation // Include rotation data
     })
     setIsSubmitted(true)
-  }, [socket, currentWord])
+  }, [socket, rotation])
 
   // Unsubmit drawing function
   const unsubmitDrawing = useCallback(() => {
@@ -697,6 +804,29 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               💾
             </button>
           </div>
+
+          {/* Rotation Controls */}
+          <div className="tool-group">
+            <label htmlFor="rotation">Rotation:</label>
+            <input
+              id="rotation"
+              type="range"
+              min="0"
+              max="360"
+              step="15"
+              value={rotation}
+              onChange={(e) => rotateCanvas(Number(e.target.value))}
+              className="rotation-slider"
+            />
+            <span className="rotation-value">{rotation}°</span>
+            <button
+              className="tool-button reset-rotation-button"
+              onClick={resetRotation}
+              title="Reset Rotation"
+            >
+              🔄
+            </button>
+          </div>
         </div>
       )}
 
@@ -723,14 +853,20 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               <p>Loading background image...</p>
             </div>
           ) : (
-            <canvas
-              ref={canvasRef}
-              className="drawing-canvas"
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-            />
+            <div className="canvas-container">
+              <canvas
+                ref={canvasRef}
+                className="drawing-canvas"
+                style={{
+                  transform: `rotate(${rotation}deg)`,
+                  transformOrigin: 'center center'
+                }}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+              />
+            </div>
           )}
         </div>
       )}
@@ -781,8 +917,15 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
                       src={drawing.drawing} 
                       alt={`Drawing ${index + 1}`}
                       className="result-drawing"
+                      style={{
+                        transform: `rotate(${drawing.rotation || 0}deg)`,
+                        transformOrigin: 'center center'
+                      }}
                     />
                     <p className="drawing-label">Player {index + 1}</p>
+                    {drawing.rotation !== undefined && drawing.rotation !== 0 && (
+                      <p className="rotation-info">Rotation: {drawing.rotation}°</p>
+                    )}
                     {drawing.originalWord && <p className="original-word">Was supposed to draw: <strong>{drawing.originalWord}</strong></p>}
                   </div>
                 ))}
