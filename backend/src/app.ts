@@ -43,6 +43,12 @@ interface GameState {
     allWords: string[]; // original words + additional words
     additionalWords?: string[]; // just the extra words for voting
   };
+  votingPhase?: {
+    currentPlayerIndex: number;
+    votedWords: Set<string>;
+    playerVotes: Map<string, string>; // playerId -> votedWord
+    isComplete: boolean;
+  };
 }
 
 const gameState: GameState = {
@@ -129,6 +135,8 @@ io.on('connection', (socket) => {
       
       if (allSubmitted) {
         // Generate game results
+        const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+        
         const drawings = joinedPlayers
           .filter(p => p.drawing)
           .map(p => ({ 
@@ -154,12 +162,157 @@ io.on('connection', (socket) => {
         
         // Send results to all players
         io.emit('gameResults', gameState.gameResults);
+        
+        // Initialize voting phase
+        gameState.votingPhase = {
+          currentPlayerIndex: 0,
+          votedWords: new Set(),
+          playerVotes: new Map(),
+          isComplete: false
+        };
+        
+        // Start voting phase
+        io.emit('votingStarted', {
+          currentPlayerId: joinedPlayers[0].id,
+          currentPlayerName: joinedPlayers[0].name,
+          totalPlayers: joinedPlayers.length,
+          allWords: gameState.gameResults.allWords
+        });
       }
       
       // Broadcast updated submission status
       io.emit('playerList', joinedPlayers);
       io.emit('allSubmitted', allSubmitted);
     }
+  });
+  
+  // Handle player voting
+  socket.on('voteWord', (data: { word: string }) => {
+    if (!gameState.votingPhase || gameState.votingPhase.isComplete) return;
+    
+    const player = gameState.players.get(socket.id);
+    if (!player || !player.joined) return;
+    
+    const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+    const currentPlayer = joinedPlayers[gameState.votingPhase.currentPlayerIndex];
+    
+    // Check if it's this player's turn
+    if (currentPlayer.id !== socket.id) {
+      console.log(`Player ${player.name} tried to vote out of turn`);
+      return;
+    }
+    
+    // Record the vote
+    gameState.votingPhase.playerVotes.set(socket.id, data.word);
+    gameState.votingPhase.votedWords.add(data.word);
+    
+    console.log(`Player ${player.name} voted out: ${data.word}`);
+    
+    // Broadcast the vote to all players
+    io.emit('wordVotedOut', {
+      word: data.word,
+      playerName: player.name,
+      votedWords: Array.from(gameState.votingPhase.votedWords)
+    });
+    
+    // Move to next player
+    gameState.votingPhase.currentPlayerIndex++;
+    
+    if (gameState.votingPhase.currentPlayerIndex >= joinedPlayers.length) {
+      // Voting phase complete
+      gameState.votingPhase.isComplete = true;
+      
+      // Calculate score - count remaining player words vs total players
+      const playerWords = joinedPlayers.map(p => p.originalWord || '').filter(w => w);
+      const remainingPlayerWords = playerWords.filter(word => 
+        !gameState.votingPhase!.votedWords.has(word)
+      );
+      const correctWords = remainingPlayerWords.length;
+      const totalPlayers = joinedPlayers.length;
+      const score = `${correctWords}/${totalPlayers}`;
+      
+      // Categorize remaining words for display
+      const remainingWords = gameState.gameResults!.allWords.filter(word => 
+        !gameState.votingPhase!.votedWords.has(word)
+      );
+      const remainingPlayerWordsForDisplay = remainingWords.filter(word => 
+        playerWords.includes(word)
+      );
+      const remainingAdditionalWordsForDisplay = remainingWords.filter(word => 
+        !playerWords.includes(word)
+      );
+      
+      console.log(`Voting complete! Score: ${score} (${correctWords} player words remaining out of ${totalPlayers} players)`);
+      
+      // Send final results
+      io.emit('votingComplete', {
+        score,
+        correctWords,
+        totalPlayers,
+        remainingWords,
+        remainingPlayerWords: remainingPlayerWordsForDisplay,
+        remainingAdditionalWords: remainingAdditionalWordsForDisplay,
+        votedWords: Array.from(gameState.votingPhase.votedWords),
+        votedPlayerWords: Array.from(gameState.votingPhase.votedWords).filter(word => 
+          playerWords.includes(word)
+        ),
+        votedAdditionalWords: Array.from(gameState.votingPhase.votedWords).filter(word => 
+          !playerWords.includes(word)
+        ),
+        playerVotes: Object.fromEntries(gameState.votingPhase.playerVotes)
+      });
+    } else {
+      // Next player's turn
+      const nextPlayer = joinedPlayers[gameState.votingPhase.currentPlayerIndex];
+      io.emit('nextPlayerTurn', {
+        currentPlayerId: nextPlayer.id,
+        currentPlayerName: nextPlayer.name,
+        playerIndex: gameState.votingPhase.currentPlayerIndex + 1,
+        totalPlayers: joinedPlayers.length
+      });
+    }
+  });
+  
+  // Handle new round request
+  socket.on('newRound', () => {
+    const player = gameState.players.get(socket.id);
+    if (!player || !player.joined) return;
+    
+    console.log(`Player ${player.name} requested a new round`);
+    
+    // Reset game state for new round
+    gameState.allSubmitted = false;
+    gameState.gameResults = undefined;
+    gameState.votingPhase = undefined;
+    
+    // Reset all players for new round and assign new words
+    const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+    const newWords = getRandomWords(joinedPlayers.length);
+    
+    joinedPlayers.forEach((p, index) => {
+      p.submitted = false;
+      p.drawing = undefined;
+      p.originalWord = newWords[index]; // Assign new word
+    });
+    
+    console.log(`New round started with words: [${newWords.join(', ')}]`);
+    
+    // Broadcast new round started
+    io.emit('newRoundStarted');
+    
+    // Send individual word assignments to each player
+    joinedPlayers.forEach((player, index) => {
+      const playerSocket = io.sockets.sockets.get(player.id);
+      if (playerSocket) {
+        playerSocket.emit('newWord', {
+          word: newWords[index]
+        });
+      }
+    });
+    
+    // Broadcast updated status
+    io.emit('playerList', joinedPlayers);
+    io.emit('allSubmitted', false);
   });
   
   // Handle player unsubmission

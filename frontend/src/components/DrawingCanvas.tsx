@@ -31,6 +31,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [playerName, setPlayerName] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [showPlayerDetails, setShowPlayerDetails] = useState(false)
+  
+  // Voting state
+  const [votingPhase, setVotingPhase] = useState<any>(null)
+  const [currentPlayerTurn, setCurrentPlayerTurn] = useState<any>(null)
+  const [votedWords, setVotedWords] = useState<string[]>([])
+  const [votingComplete, setVotingComplete] = useState<any>(null)
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -51,6 +57,44 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
     newSocket.on('gameResults', (results: any) => {
       setGameResults(results)
+    })
+
+    newSocket.on('votingStarted', (data: any) => {
+      setVotingPhase(data)
+      setCurrentPlayerTurn(data)
+      setVotedWords([])
+      console.log('Voting phase started:', data)
+    })
+
+    newSocket.on('wordVotedOut', (data: any) => {
+      setVotedWords(data.votedWords)
+      console.log(`Word voted out: ${data.word} by ${data.playerName}`)
+    })
+
+    newSocket.on('nextPlayerTurn', (data: any) => {
+      setCurrentPlayerTurn(data)
+      console.log('Next player turn:', data)
+    })
+
+    newSocket.on('votingComplete', (data: any) => {
+      setVotingComplete(data)
+      console.log('Voting complete:', data)
+    })
+
+    newSocket.on('newRoundStarted', () => {
+      setVotingPhase(null)
+      setCurrentPlayerTurn(null)
+      setVotedWords([])
+      setVotingComplete(null)
+      setGameResults(null)
+      setIsSubmitted(false)
+      clearCanvas() // Clear canvas for new round
+      console.log('New round started')
+    })
+
+    newSocket.on('newWord', (data: { word: string }) => {
+      setCurrentWord(data.word)
+      console.log('New word assigned:', data.word)
     })
 
     return () => {
@@ -396,16 +440,26 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     setIsDrawing(false)
   }, [])
 
+  // Clear canvas function
   const clearCanvas = useCallback(() => {
+    if (!canvasRef.current || !backgroundImageRef.current) return
+    
     const canvas = canvasRef.current
-    if (!canvas || !backgroundImageRef.current) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-
-    // Redraw background image
-    ctx.drawImage(backgroundImageRef.current, 0, 0)
-  }, [])
+    
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // Redraw the background image
+    ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height)
+    
+    // Reset distances computation
+    if (backgroundImageRef.current.complete) {
+      const newDistances = computeDistances(backgroundImageRef.current)
+      setDistances(newDistances)
+    }
+  }, [computeDistances])
 
   const downloadCanvas = useCallback(() => {
     const canvas = canvasRef.current
@@ -438,6 +492,13 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     socket.emit('unsubmitDrawing')
     setIsSubmitted(false)
   }, [socket])
+
+  // Vote word function
+  const voteWord = useCallback((word: string) => {
+    if (!socket || !votingPhase) return
+    
+    socket.emit('voteWord', { word })
+  }, [socket, votingPhase])
 
   const presetColors = [
     '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
@@ -727,19 +788,107 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
                 ))}
               </div>
             </div>
-            <div className="words-section">
-              <h4>All Words in the Game:</h4>
-              <div className="words-list">
-                {gameResults.allWords.map((word: string, index: number) => (
-                  <span key={index} className="word-tag">
-                    {word}
-                  </span>
-                ))}
+            
+            {/* Voting Section */}
+            {votingPhase && !votingComplete && (
+              <div className="voting-section">
+                <h4>🗳️ Voting Phase</h4>
+                <div className="voting-info">
+                  <p className="current-turn">
+                    {currentPlayerTurn?.currentPlayerId === socket?.id ? (
+                      <span className="your-turn">🎯 It's your turn to vote!</span>
+                    ) : (
+                      <span className="waiting-turn">
+                        ⏳ Waiting for {currentPlayerTurn?.currentPlayerName} to vote...
+                      </span>
+                    )}
+                  </p>
+                  <p className="turn-progress">
+                    Player {currentPlayerTurn?.playerIndex || 1} of {currentPlayerTurn?.totalPlayers || playerCount}
+                  </p>
+                </div>
+                
+                <div className="words-voting">
+                  <h5>Vote out a word that you think is NOT shown in the drawings:</h5>
+                  <div className="words-list">
+                    {gameResults.allWords.map((word: string) => (
+                      <button
+                        key={word}
+                        className={`word-tag ${votedWords.includes(word) ? 'voted-out' : ''} ${
+                          currentPlayerTurn?.currentPlayerId === socket?.id ? 'clickable' : 'disabled'
+                        }`}
+                        onClick={() => voteWord(word)}
+                        disabled={votedWords.includes(word) || currentPlayerTurn?.currentPlayerId !== socket?.id}
+                        title={
+                          votedWords.includes(word) 
+                            ? `Voted out by ${votingPhase.playerVotes?.[word] || 'unknown'}`
+                            : currentPlayerTurn?.currentPlayerId === socket?.id
+                            ? 'Click to vote out this word'
+                            : 'Wait for your turn'
+                        }
+                      >
+                        {word}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <p className="words-note">
-                <em>Includes original words each player was supposed to draw + additional words for voting</em>
-              </p>
-            </div>
+            )}
+            
+            {/* Voting Results */}
+            {votingComplete && (
+              <div className="voting-results">
+                <h4>🏆 Voting Complete!</h4>
+                <div className="final-score">
+                  <h3>Final Score: {votingComplete.score}</h3>
+                  <p>{votingComplete.correctWords} player words correctly identified out of {votingComplete.totalPlayers} players!</p>
+                </div>
+                <div className="voted-words-summary">
+                  <h5>Words voted out:</h5>
+                  <div className="voted-words-list">
+                    {/* Voted out player words in green */}
+                    {votingComplete.votedPlayerWords?.map((word: string) => (
+                      <span key={word} className="word-tag voted-out-player">
+                        {word}
+                      </span>
+                    ))}
+                    {/* Voted out additional words in red */}
+                    {votingComplete.votedAdditionalWords?.map((word: string) => (
+                      <span key={word} className="word-tag voted-out-additional">
+                        {word}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="remaining-words-summary">
+                  <h5>Words remaining (correctly identified):</h5>
+                  <div className="remaining-words-list">
+                    {/* Player words in green */}
+                    {votingComplete.remainingPlayerWords?.map((word: string) => (
+                      <span key={word} className="word-tag player-word">
+                        {word}
+                      </span>
+                    ))}
+                    {/* Additional words in red */}
+                    {votingComplete.remainingAdditionalWords?.map((word: string) => (
+                      <span key={word} className="word-tag additional-word">
+                        {word}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button 
+                  className="new-round-button"
+                  onClick={() => {
+                    socket?.emit('newRound')
+                    clearCanvas() // Clear canvas when new round starts
+                  }}
+                >
+                  🎮 Start New Round
+                </button>
+              </div>
+            )}
+            
           </div>
         </div>
       )}

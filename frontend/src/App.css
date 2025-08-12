@@ -595,6 +595,183 @@
   font-size: 0.9rem;
 }
 
+/* Voting System */
+.voting-section {
+  background: #f8f9fa;
+  border-radius: 15px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  border: 1px solid #e9ecef;
+}
+
+.voting-info {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.current-turn {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.your-turn {
+  color: #28a745;
+  background: rgba(40, 167, 69, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.waiting-turn {
+  color: #ffc107;
+  background: rgba(255, 193, 7, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.turn-progress {
+  color: #6c757d;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.words-voting h5 {
+  text-align: center;
+  color: #495057;
+  margin-bottom: 1rem;
+}
+
+.word-tag.clickable {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.word-tag.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.word-tag.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.word-tag.voted-out {
+  background: #6c757d !important;
+  color: white !important;
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
+.word-tag.voted-out-player {
+  background: #dc3545 !important;
+  color: white !important;
+  text-decoration: line-through;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.word-tag.voted-out-additional {
+  background: #6c757d !important;
+  color: white !important;
+  text-decoration: line-through;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.word-tag.correct {
+  background: #28a745 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+.word-tag.player-word {
+  background: #28a745 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+.word-tag.additional-word {
+  background: #dc3545 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+/* Voting Results */
+.voting-results {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border-radius: 15px;
+  padding: 2rem;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.final-score h3 {
+  font-size: 2rem;
+  margin: 0 0 1rem 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.final-score p {
+  font-size: 1.1rem;
+  margin: 0 0 1.5rem 0;
+  opacity: 0.9;
+}
+
+.voted-words-summary h5 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+}
+
+.voted-words-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.remaining-words-summary {
+  margin-top: 1.5rem;
+}
+
+.remaining-words-summary h5 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+}
+
+.remaining-words-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.new-round-button {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 25px;
+  cursor: pointer;
+  margin-top: 2rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+.new-round-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+}
+
+.new-round-button:active {
+  transform: translateY(0);
+}
+
 /* Game Results Improvements */
 .original-word {
   font-size: 0.9rem;
