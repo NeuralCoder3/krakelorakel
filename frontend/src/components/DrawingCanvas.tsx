@@ -16,6 +16,33 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [minDist, setMinDist] = useState(3)
   const [distances, setDistances] = useState<number[][]>([])
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [currentWord, setCurrentWord] = useState('')
+  const [wordCategory, setWordCategory] = useState('')
+
+  // Sample words for different categories
+  const wordLists = {
+    animals: ['cat', 'dog', 'elephant', 'lion', 'tiger', 'bear', 'wolf', 'fox', 'deer', 'rabbit', 'squirrel', 'bird', 'fish', 'horse', 'cow', 'pig', 'sheep', 'goat', 'chicken', 'duck'],
+    objects: ['car', 'house', 'tree', 'flower', 'book', 'phone', 'computer', 'chair', 'table', 'bed', 'lamp', 'clock', 'cup', 'plate', 'fork', 'knife', 'spoon', 'bottle', 'bag', 'shoes'],
+    nature: ['mountain', 'river', 'ocean', 'forest', 'beach', 'sun', 'moon', 'stars', 'clouds', 'rain', 'snow', 'grass', 'rocks', 'cave', 'volcano', 'island', 'desert', 'lake', 'waterfall', 'bridge'],
+    food: ['apple', 'banana', 'orange', 'pizza', 'hamburger', 'hotdog', 'ice cream', 'cake', 'bread', 'cheese', 'milk', 'eggs', 'rice', 'pasta', 'soup', 'salad', 'steak', 'chicken', 'fish', 'vegetables'],
+    fantasy: ['dragon', 'unicorn', 'wizard', 'witch', 'fairy', 'castle', 'knight', 'princess', 'king', 'queen', 'magic wand', 'crystal ball', 'flying carpet', 'treasure chest', 'monster', 'ghost', 'vampire', 'werewolf', 'mermaid', 'phoenix']
+  }
+
+  // Get a random word from a random category
+  const getRandomWord = useCallback(() => {
+    const categories = Object.keys(wordLists)
+    const randomCategory = categories[Math.floor(Math.random() * categories.length)]
+    const words = wordLists[randomCategory as keyof typeof wordLists]
+    const randomWord = words[Math.floor(Math.random() * words.length)]
+    
+    setCurrentWord(randomWord)
+    setWordCategory(randomCategory)
+  }, [])
+
+  // Initialize with a random word
+  useEffect(() => {
+    getRandomWord()
+  }, [getRandomWord])
 
   // Load background image
   useEffect(() => {
@@ -338,6 +365,33 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
   return (
     <div className="drawing-canvas-container">
+      {/* Word Display Section */}
+      <div className="word-display">
+        <div className="word-info">
+          <div className="word-category">
+            <span className="category-icon">
+              {wordCategory === 'animals' && '🐾'}
+              {wordCategory === 'objects' && '🔧'}
+              {wordCategory === 'nature' && '🌿'}
+              {wordCategory === 'food' && '🍕'}
+              {wordCategory === 'fantasy' && '✨'}
+            </span>
+            <span className="category-text">{wordCategory}</span>
+          </div>
+          <div className="current-word">
+            <h3>Draw this:</h3>
+            <div className="word-text">{currentWord}</div>
+          </div>
+        </div>
+        <button 
+          className="new-word-button"
+          onClick={getRandomWord}
+          title="Get a new word to draw"
+        >
+          🎲 New Word
+        </button>
+      </div>
+
       <div className="canvas-toolbar">
         {DEBUG && (
         <div className="tool-group">
