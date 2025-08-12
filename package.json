@@ -1,0 +1,24 @@
+{
+  "name": "krakelorakel",
+  "version": "1.0.0",
+  "description": "A mystical AI chat application with React frontend and Express backend",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "cd frontend && npm run preview",
+    "start:backend": "cd backend && npm start",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "clean": "cd frontend && npm run build && cd ../backend && npm run clean"
+  },
+  "keywords": ["react", "typescript", "express", "chat", "ai", "oracle"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.0.0"
+  }
+}
