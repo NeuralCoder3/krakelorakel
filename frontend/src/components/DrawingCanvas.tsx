@@ -6,8 +6,7 @@ interface DrawingCanvasProps {}
 const DEBUG = false;
 
 const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const backgroundImageRef = useRef<HTMLImageElement | null>(null)
+  // Canvas state
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(5)
   const [brushColor, setBrushColor] = useState('#000000')
@@ -20,6 +19,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [currentWord, setCurrentWord] = useState('')
   const [wordCategory, setWordCategory] = useState('')
   const [boardImageUrl, setBoardImageUrl] = useState('')
+  
+  // Canvas refs
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null)
   
   // Multiplayer state
   const [socket, setSocket] = useState<Socket | null>(null)
@@ -172,25 +175,25 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   // Initialize canvas and compute distances
   useEffect(() => {
     if (!imageLoaded || !backgroundImageRef.current) return
-
+    
     const canvas = canvasRef.current
     if (!canvas) return
-
+    
     const img = backgroundImageRef.current
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-
+    
     // Set canvas size to match image
     canvas.width = img.width
     canvas.height = img.height
-
+    
     // Draw background image
     ctx.drawImage(img, 0, 0)
-
+    
     // Compute distances using dynamic programming
     const computedDistances = computeDistances(img)
     setDistances(computedDistances)
-
+    
     // Set canvas style for drawing
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -201,19 +204,19 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     if (!ctx) return []
-
+    
     canvas.width = img.width
     canvas.height = img.height
     ctx.drawImage(img, 0, 0)
-
+    
     const imageData = ctx.getImageData(0, 0, img.width, img.height)
     const data = imageData.data
     const width = img.width
     const height = img.height
-
+    
     // Initialize distance array with infinity
     const dist: number[][] = Array(height).fill(null).map(() => Array(width).fill(Infinity))
-
+    
     // First pass: top-down, left-right
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -221,10 +224,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         const r = data[idx]
         const g = data[idx + 1]
         const b = data[idx + 2]
-
+        
         // Check if pixel is non-white (using threshold)
         const isNonWhite = r < 250 || g < 250 || b < 250
-
+        
         if (isNonWhite) {
           dist[y][x] = 0
         } else {
@@ -234,12 +237,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
           if (x > 0) minDist = Math.min(minDist, dist[y][x - 1] + 1)
           if (y > 0 && x > 0) minDist = Math.min(minDist, dist[y - 1][x - 1] + 1.414)
           if (y > 0 && x < width - 1) minDist = Math.min(minDist, dist[y - 1][x + 1] + 1.414)
-
+          
           dist[y][x] = Math.min(dist[y][x], minDist)
         }
       }
     }
-
+    
     // Second pass: bottom-up, right-left
     for (let y = height - 1; y >= 0; y--) {
       for (let x = width - 1; x >= 0; x--) {
@@ -249,11 +252,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         if (x < width - 1) minDist = Math.min(minDist, dist[y][x + 1] + 1)
         if (y < height - 1 && x < width - 1) minDist = Math.min(minDist, dist[y + 1][x + 1] + 1.414)
         if (y < height - 1 && x > 0) minDist = Math.min(minDist, dist[y + 1][x - 1] + 1.414)
-
+        
         dist[y][x] = minDist
       }
     }
-
+    
     return dist
   }, [])
 
@@ -270,33 +273,33 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   // Find valid line segments and draw only those parts
   const findAndDrawValidSegments = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     if (distances.length === 0) return false
-
+    
     const canvas = canvasRef.current
     if (!canvas) return false
-
+    
     const ctx = canvas.getContext('2d')
     if (!ctx) return false
-
+    
     // Use Bresenham's line algorithm to find valid segments
     const dx = Math.abs(x2 - x1)
     const dy = Math.abs(y2 - y1)
     const sx = x1 < x2 ? 1 : -1
     const sy = y1 < y2 ? 1 : -1
     let err = dx - dy
-
+    
     let x = x1
     let y = y1
     let lastValidX = -1
     let lastValidY = -1
     let hasValidSegment = false
-
+    
     // First pass: find all valid segments
     const segments: { start: { x: number, y: number }, end: { x: number, y: number } }[] = []
     let segmentStart: { x: number, y: number } | null = null
-
+    
     while (true) {
       const isValid = isWithinDrawingDistance(x, y)
-
+      
       if (isValid && segmentStart === null) {
         // Start of a valid segment
         segmentStart = { x, y }
@@ -308,13 +311,13 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         })
         segmentStart = null
       }
-
+      
       if (isValid) {
         lastValidX = x
         lastValidY = y
         hasValidSegment = true
       }
-
+      
       if (x === x2 && y === y2) {
         // End of line - close any open segment
         if (segmentStart !== null) {
@@ -325,7 +328,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         }
         break
       }
-
+      
       const e2 = 2 * err
       if (e2 > -dy) {
         err -= dy
@@ -336,12 +339,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         y += sy
       }
     }
-
+    
     // Draw all valid segments
     if (hasValidSegment) {
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
-
+      
       if (isEraser) {
         // For eraser, restore original background image pixels
         segments.forEach(segment => {
@@ -349,26 +352,26 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
           const tempCanvas = document.createElement('canvas')
           const tempCtx = tempCanvas.getContext('2d')
           if (!tempCtx || !backgroundImageRef.current) return
-
+          
           // Calculate the bounding box of the eraser stroke
           const minX = Math.min(segment.start.x, segment.end.x) - brushSize
           const maxX = Math.max(segment.start.x, segment.end.x) + brushSize
           const minY = Math.min(segment.start.y, segment.end.y) - brushSize
           const maxY = Math.max(segment.start.y, segment.end.y) + brushSize
-
+          
           // Set temp canvas size to cover the eraser area
           const width = maxX - minX
           const height = maxY - minY
           tempCanvas.width = width
           tempCanvas.height = height
-
+          
           // Draw the background image portion
           tempCtx.drawImage(
             backgroundImageRef.current,
             minX, minY, width, height,
             0, 0, width, height
           )
-
+          
           // Clear the main canvas in the eraser area
           ctx.save()
           ctx.globalCompositeOperation = 'destination-out'
@@ -379,7 +382,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
           ctx.arc(segment.end.x, segment.end.y, brushSize, 0, 2 * Math.PI)
           ctx.fill()
           ctx.restore()
-
+          
           // Restore the background image in the cleared area
           ctx.drawImage(tempCanvas, minX, minY)
         })
@@ -387,7 +390,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
         // Normal drawing
         ctx.strokeStyle = brushColor
         ctx.lineWidth = brushSize
-
+        
         segments.forEach(segment => {
           ctx.beginPath()
           ctx.moveTo(segment.start.x, segment.start.y)
@@ -395,10 +398,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
           ctx.stroke()
         })
       }
-
+      
       return true
     }
-
+    
     return false
   }, [distances, minDist, isWithinDrawingDistance, isEraser, brushSize, brushColor])
 
@@ -406,11 +409,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
-
+    
     const rect = canvas.getBoundingClientRect()
     const x = Math.floor(e.clientX - rect.left)
     const y = Math.floor(e.clientY - rect.top)
-
+    
     // Always allow starting to draw, even from invalid areas
     setIsDrawing(true)
     setLastX(x)
@@ -419,17 +422,17 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return
-
+    
     const canvas = canvasRef.current
     if (!canvas) return
-
+    
     const rect = canvas.getBoundingClientRect()
     const x = Math.floor(e.clientX - rect.left)
     const y = Math.floor(e.clientY - rect.top)
-
+    
     // Find and draw only valid segments
     const drawn = findAndDrawValidSegments(lastX, lastY, x, y)
-
+    
     if (drawn) {
       setLastX(x)
       setLastY(y)
@@ -442,17 +445,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
   // Clear canvas function
   const clearCanvas = useCallback(() => {
-    if (!canvasRef.current || !backgroundImageRef.current) return
-    
     const canvas = canvasRef.current
+    if (!canvas || !backgroundImageRef.current) return
+    
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    
-    // Redraw the background image
-    ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height)
+    // Redraw background image
+    ctx.drawImage(backgroundImageRef.current, 0, 0)
     
     // Reset distances computation
     if (backgroundImageRef.current.complete) {
