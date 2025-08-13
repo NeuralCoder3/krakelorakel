@@ -984,47 +984,64 @@
   font-size: 1.5rem;
 }
 
+/* Player Name Input Group */
 .name-input-group {
+  text-align: center;
+  margin: 20px 0;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.input-row {
   display: flex;
-  gap: 1rem;
+  gap: 10px;
   justify-content: center;
   align-items: center;
+  margin-bottom: 15px;
   flex-wrap: wrap;
 }
 
 .name-input {
-  padding: 0.75rem 1rem;
-  border: 2px solid #e9ecef;
-  border-radius: 25px;
-  font-size: 1rem;
-  outline: none;
-  transition: border-color 0.3s ease;
-  min-width: 250px;
+  padding: 10px 15px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+  min-width: 150px;
+  transition: border-color 0.2s ease;
 }
 
 .name-input:focus {
-  border-color: #667eea;
+  outline: none;
+  border-color: #007bff;
+}
+
+.room-info {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+  font-style: italic;
 }
 
 .join-button {
-  padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 10px 20px;
+  background: #007bff;
   color: white;
   border: none;
-  border-radius: 25px;
-  font-size: 1rem;
-  font-weight: 600;
+  border-radius: 6px;
+  font-size: 16px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s ease;
+  min-width: 120px;
 }
 
 .join-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: #0056b3;
 }
 
 .join-button:disabled {
-  opacity: 0.6;
+  background: #ccc;
   cursor: not-allowed;
 }
 
@@ -1166,4 +1183,44 @@
   color: #721c24;
   text-decoration: line-through;
   opacity: 0.7;
+}
+
+/* Room and Player Info Display */
+.room-player-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.room-info-display,
+.player-info-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.info-icon {
+  font-size: 16px;
+}
+
+.info-text {
+  color: #495057;
+}
+
+.room-info-display .info-text {
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.player-info-display .info-text {
+  color: #28a745;
+  font-weight: 600;
 }

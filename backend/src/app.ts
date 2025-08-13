@@ -37,26 +37,54 @@ interface Player {
   assignedBoard?: string; // Track which board this player has
 }
 
+// Game state interface
 interface GameState {
-  players: Map<string, Player>;
   allSubmitted: boolean;
   gameResults?: {
-    drawings: { playerId: string; drawing: string; originalWord?: string }[];
-    allWords: string[]; // original words + additional words
-    additionalWords?: string[]; // just the extra words for voting
+    drawings: Array<{
+      playerId: string;
+      playerName: string;
+      drawing: string;
+      rotation: number;
+      originalWord?: string;
+    }>;
+    allWords: string[];
+    additionalWords?: string[];
   };
   votingPhase?: {
     currentPlayerIndex: number;
     votedWords: Set<string>;
-    playerVotes: Map<string, string>; // playerId -> votedWord
+    playerVotes: Map<string, string>;
     isComplete: boolean;
   };
 }
 
-const gameState: GameState = {
-  players: new Map(),
-  allSubmitted: false
-};
+// Room interface
+interface Room {
+  id: string; // room code
+  players: Map<string, Player>;
+  gameState: GameState;
+  createdAt: Date;
+}
+
+// Global state: rooms instead of single game state
+const rooms = new Map<string, Room>();
+
+// Helper function to get or create a room
+function getOrCreateRoom(roomCode: string): Room {
+  if (!rooms.has(roomCode)) {
+    console.log(`Creating new room: ${roomCode}`);
+    rooms.set(roomCode, {
+      id: roomCode,
+      players: new Map(),
+      gameState: {
+        allSubmitted: false
+      },
+      createdAt: new Date()
+    });
+  }
+  return rooms.get(roomCode)!;
+}
 
 // Track used words to avoid duplicates
 const usedWords = new Set<string>();
@@ -120,80 +148,72 @@ function getAvailableBoards(): string[] {
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
   
-  // Add socket to game but don't count as player yet
-  const player: Player = {
-    id: socket.id,
-    name: '',
-    submitted: false,
-    joined: false
-  };
-  gameState.players.set(socket.id, player);
-  
   // Handle player joining with name
-  socket.on('setPlayerName', (data: { name: string }) => {
-    const player = gameState.players.get(socket.id);
-    if (player) {
-      player.name = data.name;
-      player.joined = true;
-      
-      // Assign a random word and the first available board to this player
-      const newWords = getRandomWords(1);
-      const availableBoards = getAvailableBoards();
-      
-      // Find the first available (unused) board
-      const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-      const usedBoards = new Set(joinedPlayers.map(p => p.assignedBoard).filter(Boolean));
-      const availableUnusedBoards = availableBoards.filter(board => !usedBoards.has(board));
-      
-      let boardIndex: number;
-      if (availableUnusedBoards.length > 0) {
-        // Use the first available unused board
-        boardIndex = availableBoards.indexOf(availableUnusedBoards[0]);
-        console.log(`Player ${data.name} gets first available board: ${availableUnusedBoards[0]}`);
-      } else {
-        // All boards are in use, fall back to random
-        boardIndex = Math.floor(Math.random() * availableBoards.length);
-        console.log(`All boards in use, player ${data.name} gets random board: ${availableBoards[boardIndex]}`);
-      }
-      
-      player.originalWord = newWords[0];
-      player.assignedBoard = availableBoards[boardIndex];
-      
-      console.log(`Player joined: ${data.name} (${socket.id}) with word: ${player.originalWord} and board: ${player.assignedBoard}`);
-      
-      // Send the assigned word and board to this player
-      const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
-      socket.emit('wordAssigned', { 
-        word: player.originalWord,
-        board: `${backendUrl}/boards/${player.assignedBoard}`
-      });
-      
-      // Broadcast updated player count (only joined players)
-      const updatedJoinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-      io.emit('playerCount', updatedJoinedPlayers.length);
-      io.emit('playerList', updatedJoinedPlayers);
-    }
+  socket.on('setPlayerName', (data: { name: string; roomCode: string }) => {
+    const room = getOrCreateRoom(data.roomCode);
+    
+    // Create and add player to the room
+    const player: Player = {
+      id: socket.id,
+      name: data.name,
+      submitted: false,
+      joined: true
+    };
+    
+    // Add player to the room
+    room.players.set(socket.id, player);
+    
+    // Join the socket to the room for broadcasting
+    socket.join(data.roomCode);
+    
+    // Assign a random word and board to this player when they join
+    const newWords = getRandomWords(1);
+    const availableBoards = getAvailableBoards();
+    const boardIndex = Math.floor(Math.random() * availableBoards.length);
+    
+    player.originalWord = newWords[0];
+    player.assignedBoard = availableBoards[boardIndex];
+    
+    console.log(`Player joined room ${data.roomCode}: ${data.name} (${socket.id}) with word: ${player.originalWord} and board: ${player.assignedBoard}`);
+    
+    // Send the assigned word and board to this player
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+    socket.emit('wordAssigned', { 
+      word: player.originalWord,
+      board: `${backendUrl}/boards/${player.assignedBoard}`
+    });
+    
+    // Broadcast updated player count (only joined players) to this room
+    const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
+    socket.to(data.roomCode).emit('playerCount', joinedPlayers.length);
+    socket.to(data.roomCode).emit('playerList', joinedPlayers);
+    
+    // Also emit to the joining player
+    socket.emit('playerCount', joinedPlayers.length);
+    socket.emit('playerList', joinedPlayers);
   });
   
   // Handle player submission
-  socket.on('submitDrawing', (data: { drawing: string; rotation: number }) => {
-    const player = gameState.players.get(socket.id);
+  socket.on('submitDrawing', (data: { drawing: string; rotation: number; roomCode: string }) => {
+    const room = getOrCreateRoom(data.roomCode);
+    const player = room.players.get(socket.id);
+    
     if (player && player.joined) {
       player.submitted = true;
       player.drawing = data.drawing;
       player.rotation = data.rotation; // Store rotation data
-      // player.originalWord is already set by the server when player joins
+      // player.originalWord is already tracked by server
       
-      console.log(`Player ${player.name} submitted drawing with rotation: ${data.rotation}°`);
+      console.log(`Player ${player.name} submitted drawing with rotation: ${data.rotation}° in room ${data.roomCode}`);
       
       // Check if all joined players submitted
-      const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-      const allSubmitted = joinedPlayers.every(p => p.submitted);
-      gameState.allSubmitted = allSubmitted;
+      const roomJoinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
+      const allSubmitted = roomJoinedPlayers.every(p => p.submitted);
+      room.gameState.allSubmitted = allSubmitted;
       
       if (allSubmitted) {
         // Generate game results
-        const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+        const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
         
         const drawings = joinedPlayers
           .filter(p => p.drawing)
@@ -212,19 +232,19 @@ io.on('connection', (socket) => {
         const originalWords = joinedPlayers.map(p => p.originalWord || '').filter(w => w) as string[];
         const allWords = [...originalWords, ...additionalWords].sort();
         
-        console.log(`Game completed! Player words: [${originalWords.join(', ')}], Additional words: [${additionalWords.join(', ')}]`);
+        console.log(`Game completed in room ${data.roomCode}! Player words: [${originalWords.join(', ')}], Additional words: [${additionalWords.join(', ')}]`);
         
-        gameState.gameResults = {
+        room.gameState.gameResults = {
           drawings,
           allWords,
           ...(DEBUG && {additionalWords: additionalWords})
         };
         
-        // Send results to all players
-        io.emit('gameResults', gameState.gameResults);
+        // Send results to all players in this room
+        io.to(data.roomCode).emit('gameResults', room.gameState.gameResults);
         
         // Initialize voting phase
-        gameState.votingPhase = {
+        room.gameState.votingPhase = {
           currentPlayerIndex: 0,
           votedWords: new Set(),
           playerVotes: new Map(),
@@ -236,67 +256,69 @@ io.on('connection', (socket) => {
           currentPlayerId: joinedPlayers[0].id,
           currentPlayerName: joinedPlayers[0].name,
           totalPlayers: joinedPlayers.length,
-          allWords: gameState.gameResults.allWords
+          allWords: room.gameState.gameResults.allWords
         };
         console.log('Starting voting phase with data:', votingData);
-        console.log('allWords array:', gameState.gameResults.allWords);
-        io.emit('votingStarted', votingData);
+        console.log('allWords array:', room.gameState.gameResults.allWords);
+        io.to(data.roomCode).emit('votingStarted', votingData);
       }
       
-      // Broadcast updated submission status
-      io.emit('playerList', joinedPlayers);
-      io.emit('allSubmitted', allSubmitted);
+      // Broadcast updated submission status to this room
+      const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
+      io.to(data.roomCode).emit('playerList', joinedPlayers);
+      io.to(data.roomCode).emit('allSubmitted', allSubmitted);
     }
   });
   
   // Handle player voting
-  socket.on('voteWord', (data: { word: string }) => {
-    if (!gameState.votingPhase || gameState.votingPhase.isComplete) return;
+  socket.on('voteWord', (data: { word: string; roomCode: string }) => {
+    const room = getOrCreateRoom(data.roomCode);
+    if (!room.gameState.votingPhase || room.gameState.votingPhase.isComplete) return;
     
-    const player = gameState.players.get(socket.id);
+    const player = room.players.get(socket.id);
     if (!player || !player.joined) return;
     
-    const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-    const currentPlayer = joinedPlayers[gameState.votingPhase.currentPlayerIndex];
+    const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
+    const currentPlayer = joinedPlayers[room.gameState.votingPhase.currentPlayerIndex];
     
     // Check if it's this player's turn
     if (currentPlayer.id !== socket.id) {
-      console.log(`Player ${player.name} tried to vote out of turn`);
+      console.log(`Player ${player.name} tried to vote out of turn in room ${data.roomCode}`);
       return;
     }
     
     // Record the vote
-    gameState.votingPhase.playerVotes.set(socket.id, data.word);
-    gameState.votingPhase.votedWords.add(data.word);
+    room.gameState.votingPhase.playerVotes.set(socket.id, data.word);
+    room.gameState.votingPhase.votedWords.add(data.word);
     
-    console.log(`Player ${player.name} voted out: ${data.word}`);
+    console.log(`Player ${player.name} voted out: ${data.word} in room ${data.roomCode}`);
     
-    // Broadcast the vote to all players
-    io.emit('wordVotedOut', {
+    // Broadcast the vote to all players in this room
+    io.to(data.roomCode).emit('wordVotedOut', {
       word: data.word,
       playerName: player.name,
-      votedWords: Array.from(gameState.votingPhase.votedWords)
+      votedWords: Array.from(room.gameState.votingPhase.votedWords)
     });
     
     // Move to next player
-    gameState.votingPhase.currentPlayerIndex++;
+    room.gameState.votingPhase.currentPlayerIndex++;
     
-    if (gameState.votingPhase.currentPlayerIndex >= joinedPlayers.length) {
+    if (room.gameState.votingPhase.currentPlayerIndex >= joinedPlayers.length) {
       // Voting phase complete
-      gameState.votingPhase.isComplete = true;
+      room.gameState.votingPhase.isComplete = true;
       
       // Calculate score - count remaining player words vs total players
       const playerWords = joinedPlayers.map(p => p.originalWord || '').filter(w => w);
       const remainingPlayerWords = playerWords.filter(word => 
-        !gameState.votingPhase!.votedWords.has(word)
+        !room.gameState.votingPhase!.votedWords.has(word)
       );
       const correctWords = remainingPlayerWords.length;
       const totalPlayers = joinedPlayers.length;
       const score = `${correctWords}/${totalPlayers}`;
       
       // Categorize remaining words for display
-      const remainingWords = gameState.gameResults!.allWords.filter(word => 
-        !gameState.votingPhase!.votedWords.has(word)
+      const remainingWords = room.gameState.gameResults!.allWords.filter(word => 
+        !room.gameState.votingPhase!.votedWords.has(word)
       );
       const remainingPlayerWordsForDisplay = remainingWords.filter(word => 
         playerWords.includes(word)
@@ -305,51 +327,52 @@ io.on('connection', (socket) => {
         !playerWords.includes(word)
       );
       
-      console.log(`Voting complete! Score: ${score} (${correctWords} player words remaining out of ${totalPlayers} players)`);
+      console.log(`Voting complete in room ${data.roomCode}! Score: ${score} (${correctWords} player words remaining out of ${totalPlayers} players)`);
       
-      // Send final results
-      io.emit('votingComplete', {
+      // Send final results to this room
+      io.to(data.roomCode).emit('votingComplete', {
         score,
         correctWords,
         totalPlayers,
         remainingWords,
         remainingPlayerWords: remainingPlayerWordsForDisplay,
         remainingAdditionalWords: remainingAdditionalWordsForDisplay,
-        votedWords: Array.from(gameState.votingPhase.votedWords),
-        votedPlayerWords: Array.from(gameState.votingPhase.votedWords).filter(word => 
+        votedWords: Array.from(room.gameState.votingPhase.votedWords),
+        votedPlayerWords: Array.from(room.gameState.votingPhase.votedWords).filter(word => 
           playerWords.includes(word)
         ),
-        votedAdditionalWords: Array.from(gameState.votingPhase.votedWords).filter(word => 
+        votedAdditionalWords: Array.from(room.gameState.votingPhase.votedWords).filter(word => 
           !playerWords.includes(word)
         ),
-        playerVotes: Object.fromEntries(gameState.votingPhase.playerVotes)
+        playerVotes: Object.fromEntries(room.gameState.votingPhase.playerVotes)
       });
     } else {
       // Next player's turn
-      const nextPlayer = joinedPlayers[gameState.votingPhase.currentPlayerIndex];
-      io.emit('nextPlayerTurn', {
+      const nextPlayer = joinedPlayers[room.gameState.votingPhase.currentPlayerIndex];
+      io.to(data.roomCode).emit('nextPlayerTurn', {
         currentPlayerId: nextPlayer.id,
         currentPlayerName: nextPlayer.name,
-        playerIndex: gameState.votingPhase.currentPlayerIndex + 1,
+        playerIndex: room.gameState.votingPhase.currentPlayerIndex + 1,
         totalPlayers: joinedPlayers.length
       });
     }
   });
   
   // Handle new round request
-  socket.on('newRound', () => {
-    const player = gameState.players.get(socket.id);
+  socket.on('newRound', (data: { roomCode: string }) => {
+    const room = getOrCreateRoom(data.roomCode);
+    const player = room.players.get(socket.id);
     if (!player || !player.joined) return;
     
-    console.log(`Player ${player.name} requested a new round`);
+    console.log(`Player ${player.name} requested a new round in room ${data.roomCode}`);
     
     // Reset game state for new round
-    gameState.allSubmitted = false;
-    gameState.gameResults = undefined;
-    gameState.votingPhase = undefined;
+    room.gameState.allSubmitted = false;
+    room.gameState.gameResults = undefined;
+    room.gameState.votingPhase = undefined;
     
     // Reset all players for new round and assign new words and boards
-    const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+    const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
     const newWords = getRandomWords(joinedPlayers.length);
     
     // Debug: Log current board state before cycling
@@ -386,10 +409,10 @@ io.on('connection', (socket) => {
     });
     console.log('=== END BOARD CYCLING DEBUG ===');
     
-    console.log(`New round started with words: [${newWords.join(', ')}] and board rotation`);
+    console.log(`New round started with words: [${newWords.join(', ')}] and board rotation in room ${data.roomCode}`);
     
     // Broadcast new round started
-    io.emit('newRoundStarted');
+    io.to(data.roomCode).emit('newRoundStarted');
     
     // Send individual word and board assignments to each player
     joinedPlayers.forEach((player, index) => {
@@ -406,46 +429,55 @@ io.on('connection', (socket) => {
     });
     
     // Broadcast updated status
-    io.emit('playerList', joinedPlayers);
-    io.emit('allSubmitted', false);
+    io.to(data.roomCode).emit('playerList', joinedPlayers);
+    io.to(data.roomCode).emit('allSubmitted', false);
   });
   
   // Handle player unsubmission
-  socket.on('unsubmitDrawing', () => {
-    const player = gameState.players.get(socket.id);
+  socket.on('unsubmitDrawing', (data: { roomCode: string }) => {
+    const room = getOrCreateRoom(data.roomCode);
+    const player = room.players.get(socket.id);
     if (player && player.joined) {
       player.submitted = false;
       delete player.drawing;
-      gameState.allSubmitted = false;
+      room.gameState.allSubmitted = false;
       
       // Broadcast updated submission status
-      const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-      io.emit('playerList', joinedPlayers);
-      io.emit('allSubmitted', false);
+      const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
+      io.to(data.roomCode).emit('playerList', joinedPlayers);
+      io.to(data.roomCode).emit('allSubmitted', false);
     }
   });
   
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`Socket disconnected: ${socket.id}`);
-    gameState.players.delete(socket.id);
     
-    // Check if game should continue
-    const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-    if (joinedPlayers.length === 0) {
-      // Reset game state when no joined players
-      gameState.allSubmitted = false;
-      gameState.gameResults = undefined;
-    } else {
-      // Check if all remaining joined players submitted
-      const allSubmitted = joinedPlayers.every(p => p.submitted);
-      gameState.allSubmitted = allSubmitted;
+    // Find and remove player from all rooms
+    for (const [roomCode, room] of rooms.entries()) {
+      if (room.players.has(socket.id)) {
+        room.players.delete(socket.id);
+        console.log(`Player removed from room ${roomCode}`);
+        
+        // Check if room should continue
+        const joinedPlayers = Array.from(room.players.values()).filter(p => p.joined);
+        if (joinedPlayers.length === 0) {
+          // Room is empty, remove it
+          rooms.delete(roomCode);
+          console.log(`Room ${roomCode} removed (no players left)`);
+        } else {
+          // Check if all remaining joined players submitted
+          const allSubmitted = joinedPlayers.every(p => p.submitted);
+          room.gameState.allSubmitted = allSubmitted;
+          
+          // Broadcast updated player count and status to this room
+          io.to(roomCode).emit('playerCount', joinedPlayers.length);
+          io.to(roomCode).emit('playerList', joinedPlayers);
+          io.to(roomCode).emit('allSubmitted', room.gameState.allSubmitted);
+        }
+        break; // Player can only be in one room
+      }
     }
-    
-    // Broadcast updated player count and status (only joined players)
-    io.emit('playerCount', joinedPlayers.length);
-    io.emit('playerList', joinedPlayers);
-    io.emit('allSubmitted', gameState.allSubmitted);
   });
 });
 
@@ -497,13 +529,21 @@ app.use('/boards', express.static(path.join(__dirname, '../boards')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+  const totalPlayers = Array.from(rooms.values()).reduce((total, room) => {
+    return total + Array.from(room.players.values()).filter(p => p.joined).length;
+  }, 0);
+  
+  const totalSockets = Array.from(rooms.values()).reduce((total, room) => {
+    return total + room.players.size;
+  }, 0);
+  
   res.status(200).json({
     status: 'OK',
     message: 'KrakelOrakel backend is running',
     timestamp: new Date().toISOString(),
-    connectedSockets: gameState.players.size,
-    joinedPlayers: joinedPlayers.length
+    rooms: rooms.size,
+    totalSockets: totalSockets,
+    joinedPlayers: totalPlayers
   });
 });
 
@@ -563,7 +603,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Start server
 httpServer.listen(PORT, () => {
   console.log(`🧙‍♂️ KrakelOrakel backend running on port ${PORT}`);
-  console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+  console.log(`�� Health check: http://localhost:${PORT}/health`);
   console.log(`📁 Boards directory: ${path.join(__dirname, '../boards')}`);
   console.log(`📁 Uploads directory: ${uploadsDir}`);
   console.log(`🔌 WebSocket server ready`);

@@ -35,6 +35,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [playerName, setPlayerName] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [showPlayerDetails, setShowPlayerDetails] = useState(false)
+  const [roomCode, setRoomCode] = useState('')
+  const [currentRoom, setCurrentRoom] = useState('')
   
   // Voting state
   const [votingPhase, setVotingPhase] = useState<any>(null)
@@ -584,25 +586,26 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
     
     socket.emit('submitDrawing', {
       drawing: drawingData,
-      rotation: rotation // Include rotation data
+      rotation: rotation, // Include rotation data
+      roomCode: roomCode // Include room code
     })
     setIsSubmitted(true)
-  }, [socket, rotation])
+  }, [socket, rotation, roomCode])
 
   // Unsubmit drawing function
   const unsubmitDrawing = useCallback(() => {
-    if (!socket) return
-    
-    socket.emit('unsubmitDrawing')
-    setIsSubmitted(false)
-  }, [socket])
+    if (socket) {
+      socket.emit('unsubmitDrawing', { roomCode: currentRoom })
+      setIsSubmitted(false)
+    }
+  }, [socket, currentRoom])
 
   // Vote word function
   const voteWord = useCallback((word: string) => {
-    if (!socket || !votingPhase) return
-    
-    socket.emit('voteWord', { word })
-  }, [socket, votingPhase])
+    if (socket) {
+      socket.emit('voteWord', { word, roomCode: currentRoom })
+    }
+  }, [socket, currentRoom])
 
   const presetColors = [
     '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
@@ -612,34 +615,44 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
   return (
     <div className="drawing-canvas-container">
-      {/* Player Name Input */}
+      {/* Player Name Input - Show when not connected */}
       {!isConnected && (
-        <div className="player-name-input">
-          <h3>🎮 Join the Game</h3>
-          <div className="name-input-group">
+        <div className="name-input-group">
+          <div className="input-row">
             <input
               type="text"
-              placeholder="Enter your name..."
+              placeholder="Enter your name"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               className="name-input"
               maxLength={20}
             />
+            <input
+              type="text"
+              placeholder="Enter room code"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              className="name-input"
+              maxLength={6}
+            />
             <button
               className="join-button"
               onClick={() => {
-                if (playerName.trim()) {
+                if (playerName.trim() && roomCode.trim()) {
+                  setCurrentRoom(roomCode.toUpperCase())
+                  socket?.emit('setPlayerName', { 
+                    name: playerName.trim(),
+                    roomCode: roomCode.toUpperCase()
+                  })
                   setIsConnected(true)
-                  if (socket) {
-                    socket.emit('setPlayerName', { name: playerName.trim() })
-                  }
                 }
               }}
-              disabled={!playerName.trim()}
+              disabled={!playerName.trim() || !roomCode.trim()}
             >
-              🚀 Join Game
+              Join Game
             </button>
           </div>
+          <p className="room-info">Enter a room code to join or create a game. Room codes are 3-6 characters long.</p>
         </div>
       )}
 
@@ -694,6 +707,18 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               </div>
             </div>
           )}
+          
+          {/* Room and Player Info */}
+          <div className="room-player-info">
+            <div className="room-info-display">
+              <span className="info-icon">🏠</span>
+              <span className="info-text">Room: {currentRoom}</span>
+            </div>
+            <div className="player-info-display">
+              <span className="info-icon">👤</span>
+              <span className="info-text">You: {playerName}</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1030,7 +1055,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
                 <button 
                   className="new-round-button"
                   onClick={() => {
-                    socket?.emit('newRound')
+                    socket?.emit('newRound', { roomCode: currentRoom })
                     clearCanvas() // Clear canvas when new round starts
                   }}
                 >
