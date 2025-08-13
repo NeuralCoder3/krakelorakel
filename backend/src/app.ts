@@ -30,10 +30,11 @@ interface Player {
   id: string;
   name: string;
   submitted: boolean;
-  drawing?: string; // base64 encoded drawing
-  joined: boolean; // whether player has actually joined the game
-  originalWord?: string; // the word they were supposed to draw (tracked by server)
-  rotation?: number; // rotation data for the drawing
+  joined: boolean;
+  originalWord?: string;
+  rotation?: number;
+  drawing?: string;
+  assignedBoard?: string; // Track which board this player has
 }
 
 interface GameState {
@@ -88,6 +89,33 @@ function getRandomWords(count: number): string[] {
   return selectedWords;
 }
 
+// Helper function to get available board files
+function getAvailableBoards(): string[] {
+  try {
+    const boardsDir = path.join(__dirname, '../boards');
+    if (!fs.existsSync(boardsDir)) {
+      console.log('Boards directory not found, using default board');
+      return ['board1.jpg']; // Fallback to default board
+    }
+    
+    const files = fs.readdirSync(boardsDir);
+    const imageFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.gif', '.bmp'].includes(ext);
+    });
+    
+    if (imageFiles.length === 0) {
+      console.log('No board images found, using default board');
+      return ['board1.jpg']; // Fallback to default board
+    }
+    
+    return imageFiles;
+  } catch (error) {
+    console.error('Error reading boards directory:', error);
+    return ['board1.jpg']; // Fallback to default board
+  }
+}
+
 // WebSocket connection handling
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
@@ -108,19 +136,42 @@ io.on('connection', (socket) => {
       player.name = data.name;
       player.joined = true;
       
-      // Assign a random word to this player when they join
+      // Assign a random word and the first available board to this player
       const newWords = getRandomWords(1);
+      const availableBoards = getAvailableBoards();
+      
+      // Find the first available (unused) board
+      const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+      const usedBoards = new Set(joinedPlayers.map(p => p.assignedBoard).filter(Boolean));
+      const availableUnusedBoards = availableBoards.filter(board => !usedBoards.has(board));
+      
+      let boardIndex: number;
+      if (availableUnusedBoards.length > 0) {
+        // Use the first available unused board
+        boardIndex = availableBoards.indexOf(availableUnusedBoards[0]);
+        console.log(`Player ${data.name} gets first available board: ${availableUnusedBoards[0]}`);
+      } else {
+        // All boards are in use, fall back to random
+        boardIndex = Math.floor(Math.random() * availableBoards.length);
+        console.log(`All boards in use, player ${data.name} gets random board: ${availableBoards[boardIndex]}`);
+      }
+      
       player.originalWord = newWords[0];
+      player.assignedBoard = availableBoards[boardIndex];
       
-      console.log(`Player joined: ${data.name} (${socket.id}) with word: ${player.originalWord}`);
+      console.log(`Player joined: ${data.name} (${socket.id}) with word: ${player.originalWord} and board: ${player.assignedBoard}`);
       
-      // Send the assigned word to this player
-      socket.emit('wordAssigned', { word: player.originalWord });
+      // Send the assigned word and board to this player
+      const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+      socket.emit('wordAssigned', { 
+        word: player.originalWord,
+        board: `${backendUrl}/boards/${player.assignedBoard}`
+      });
       
       // Broadcast updated player count (only joined players)
-      const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
-      io.emit('playerCount', joinedPlayers.length);
-      io.emit('playerList', joinedPlayers);
+      const updatedJoinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
+      io.emit('playerCount', updatedJoinedPlayers.length);
+      io.emit('playerList', updatedJoinedPlayers);
     }
   });
   
@@ -148,6 +199,7 @@ io.on('connection', (socket) => {
           .filter(p => p.drawing)
           .map(p => ({ 
             playerId: p.id, 
+            playerName: p.name,
             drawing: p.drawing!, 
             rotation: p.rotation || 0, // Include rotation data
             ...(DEBUG && { originalWord: p.originalWord }) // Only include detailed field if DEBUG is active
@@ -296,27 +348,59 @@ io.on('connection', (socket) => {
     gameState.gameResults = undefined;
     gameState.votingPhase = undefined;
     
-    // Reset all players for new round and assign new words
+    // Reset all players for new round and assign new words and boards
     const joinedPlayers = Array.from(gameState.players.values()).filter(p => p.joined);
     const newWords = getRandomWords(joinedPlayers.length);
     
+    // Debug: Log current board state before cycling
+    console.log('=== BOARD CYCLING DEBUG ===');
+    console.log('Current board assignments before cycling:');
+    joinedPlayers.forEach((p, index) => {
+      console.log(`  Player ${index}: ${p.name} has board: ${p.assignedBoard}`);
+    });
+    
+    // First, collect all current board assignments to avoid reference issues
+    const currentBoards = joinedPlayers.map(p => p.assignedBoard);
+    console.log('Collected boards array:', currentBoards);
+    
+    // Cycle boards: each player gets the board that the next player had
+    // Player 0 gets Player 1's board, Player 1 gets Player 2's board, etc.
+    // Last player gets Player 0's board (wraps around)
     joinedPlayers.forEach((p, index) => {
       p.submitted = false;
       p.drawing = undefined;
       p.originalWord = newWords[index]; // Assign new word
+      
+      // Get the board from the next player (with wraparound) using the collected boards
+      const nextPlayerIndex = (index + 1) % joinedPlayers.length;
+      const nextPlayerBoard = currentBoards[nextPlayerIndex];
+      p.assignedBoard = nextPlayerBoard;
+      
+      console.log(`Player ${p.name} gets word: ${newWords[index]}, board: ${nextPlayerBoard} (was from player ${joinedPlayers[nextPlayerIndex].name})`);
     });
     
-    console.log(`New round started with words: [${newWords.join(', ')}]`);
+    // Debug: Log final board state after cycling
+    console.log('Final board assignments after cycling:');
+    joinedPlayers.forEach((p, index) => {
+      console.log(`  Player ${index}: ${p.name} now has board: ${p.assignedBoard}`);
+    });
+    console.log('=== END BOARD CYCLING DEBUG ===');
+    
+    console.log(`New round started with words: [${newWords.join(', ')}] and board rotation`);
     
     // Broadcast new round started
     io.emit('newRoundStarted');
     
-    // Send individual word assignments to each player
+    // Send individual word and board assignments to each player
     joinedPlayers.forEach((player, index) => {
       const playerSocket = io.sockets.sockets.get(player.id);
       if (playerSocket) {
         playerSocket.emit('newWord', {
           word: newWords[index]
+        });
+        const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+        playerSocket.emit('newBoard', {
+          board: `${backendUrl}/boards/${player.assignedBoard}`
         });
       }
     });

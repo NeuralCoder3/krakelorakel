@@ -93,6 +93,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       setVotingComplete(null)
       setGameResults(null)
       setIsSubmitted(false)
+      setCurrentWord('') // Clear current word
+      setBoardImageUrl('') // Clear current board
       clearCanvas() // Clear canvas for new round
       console.log('New round started')
     })
@@ -102,9 +104,15 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       console.log('New word assigned:', data.word)
     })
 
-    newSocket.on('wordAssigned', (data: { word: string }) => {
+    newSocket.on('wordAssigned', (data: { word: string, board: string }) => {
       setCurrentWord(data.word)
-      console.log('Word assigned on join:', data.word)
+      setBoardImageUrl(data.board)
+      console.log('Word and board assigned on join:', data.word, data.board)
+    })
+
+    newSocket.on('newBoard', (data: { board: string }) => {
+      setBoardImageUrl(data.board)
+      console.log('New board assigned:', data.board)
     })
 
     return () => {
@@ -129,19 +137,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       try {
         console.log('Loading game data from server...')
         
-        // Note: Words are now assigned by the backend when players join
+        // Note: Words and boards are now assigned by the backend when players join
         // We don't need to fetch them from the API anymore
         
-        // Load board
-        const boardResponse = await fetch('/api/game/board/random')
-        console.log('Board response status:', boardResponse.status)
-        if (boardResponse.ok) {
-          const boardData = await boardResponse.json()
-          console.log('Board data received:', boardData)
-          setBoardImageUrl(boardData.url)
-        } else {
-          console.error('Failed to get board from server:', boardResponse.status)
-        }
+        // The board will be set via the 'wordAssigned' or 'newBoard' events
+        console.log('Waiting for server to assign word and board...')
       } catch (error) {
         console.error('Error loading game data:', error)
       }
@@ -922,7 +922,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
                       />
                     </div>
                     <div className="drawing-info">
-                      <p className="drawing-label">Player {index + 1}</p>
+                      <p className="drawing-label">Player {drawing.playerName}</p>
                       {drawing.rotation !== undefined && drawing.rotation !== 0 && (
                         <p className="rotation-info">Rotation: {drawing.rotation}°</p>
                       )}
