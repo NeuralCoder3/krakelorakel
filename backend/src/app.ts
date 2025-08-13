@@ -144,6 +144,30 @@ function getAvailableBoards(): string[] {
   }
 }
 
+// Helper function to get available boards for a specific room
+function getAvailableBoardsForRoom(room: Room): string[] {
+  const allBoards = getAvailableBoards();
+  const usedBoards = new Set<string>();
+  
+  // Get all boards already assigned in this room
+  for (const player of room.players.values()) {
+    if (player.assignedBoard) {
+      usedBoards.add(player.assignedBoard);
+    }
+  }
+  
+  // Filter out already used boards
+  const availableBoards = allBoards.filter(board => !usedBoards.has(board));
+  
+  // If no boards available, return all boards (will cause duplicates but prevents errors)
+  if (availableBoards.length === 0) {
+    console.log(`No available boards in room ${room.id}, reusing all boards`);
+    return allBoards;
+  }
+  
+  return availableBoards;
+}
+
 // WebSocket connection handling
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
@@ -168,13 +192,14 @@ io.on('connection', (socket) => {
     
     // Assign a random word and board to this player when they join
     const newWords = getRandomWords(1);
-    const availableBoards = getAvailableBoards();
+    const availableBoards = getAvailableBoardsForRoom(room);
     const boardIndex = Math.floor(Math.random() * availableBoards.length);
     
     player.originalWord = newWords[0];
     player.assignedBoard = availableBoards[boardIndex];
     
     console.log(`Player joined room ${data.roomCode}: ${data.name} (${socket.id}) with word: ${player.originalWord} and board: ${player.assignedBoard}`);
+    console.log(`Available boards in room ${data.roomCode}: [${availableBoards.join(', ')}]`);
     
     // Send the assigned word and board to this player
     socket.emit('wordAssigned', { 
