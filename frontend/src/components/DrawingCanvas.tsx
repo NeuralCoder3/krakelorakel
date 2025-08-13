@@ -46,7 +46,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const newSocket = io('http://localhost:5000')
+    const newSocket = io() // Use relative URL for Docker compatibility
     setSocket(newSocket)
 
     newSocket.on('playerCount', (count: number) => {

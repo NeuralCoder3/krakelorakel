@@ -4,12 +4,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: krakelorakel-backend
-    ports:
-      - "5000:5000"
+    # No ports exposed - only accessible internally
     environment:
       - NODE_ENV=production
       - PORT=5000
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://frontend:80
+      - BACKEND_URL=http://backend:5000
       - DEBUG=false
     volumes:
       - ./backend/boards:/app/boards:ro
@@ -25,13 +25,14 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: krakelorakel-frontend
     ports:
-      - "3000:80"
+      - "3000:80"  # Only frontend port exposed
     environment:
       - NODE_ENV=production
+      - BACKEND_URL=http://backend:5000
     depends_on:
       backend:
         condition: service_healthy

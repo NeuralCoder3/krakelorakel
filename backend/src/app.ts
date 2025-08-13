@@ -177,10 +177,9 @@ io.on('connection', (socket) => {
     console.log(`Player joined room ${data.roomCode}: ${data.name} (${socket.id}) with word: ${player.originalWord} and board: ${player.assignedBoard}`);
     
     // Send the assigned word and board to this player
-    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
     socket.emit('wordAssigned', { 
       word: player.originalWord,
-      board: `${backendUrl}/boards/${player.assignedBoard}`
+      board: `/boards/${player.assignedBoard}` // Use relative URL for Docker compatibility
     });
     
     // Broadcast updated player count (only joined players) to this room
@@ -421,9 +420,8 @@ io.on('connection', (socket) => {
         playerSocket.emit('newWord', {
           word: newWords[index]
         });
-        const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
         playerSocket.emit('newBoard', {
-          board: `${backendUrl}/boards/${player.assignedBoard}`
+          board: `/boards/${player.assignedBoard}` // Use relative URL for Docker compatibility
         });
       }
     });

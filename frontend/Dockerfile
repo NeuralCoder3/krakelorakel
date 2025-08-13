@@ -5,13 +5,13 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY frontend/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source code
-COPY . .
+COPY frontend/ .
 
 # Build the application
 RUN npm run build
@@ -22,8 +22,11 @@ FROM nginx:alpine AS production
 # Copy built application from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Copy boards directory for serving board images directly
+COPY backend/boards /usr/share/nginx/html/boards
+
 # Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
 # The nginx user and group already exist in nginx:alpine
 # Just ensure proper ownership
