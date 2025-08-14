@@ -1,0 +1,72 @@
+version: "3.8"
+services:
+  krakelorakel-backend:
+    container_name: krakelorakel-backend
+    restart: unless-stopped
+    image: neuralcoder/krakelorakel-backend:latest
+    volumes:
+      - ./backend/boards:/app/boards:ro
+    networks:
+      - krakelorakel-network
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - FRONTEND_URL=http://krakelorakel-frontend:80
+      - BACKEND_URL=http://krakelorakel-backend:5000
+      - DEBUG=false
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:5000/health', (res) => {
+          process.exit(res.statusCode === 200 ? 0 : 1) })"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  krakelorakel-frontend:
+    container_name: krakelorakel-frontend
+    restart: unless-stopped
+    image: neuralcoder/krakelorakel-frontend:latest
+    environment:
+      - NODE_ENV=production
+      - BACKEND_URL=http://krakelorakel-backend:5000
+    networks:
+      - krakelorakel-network
+      - dockge-nginx_default
+      - dockge-nginx_dockge-nginx
+    ports:
+      - 3000:80
+    depends_on:
+      krakelorakel-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - http://localhost:80/
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.krakelorakel.rule=Host(`krakelorakel.neuralcoder.de`)
+      - traefik.http.routers.krakelorakel.entrypoints=websecure
+      - traefik.http.routers.krakelorakel.tls=true
+      - traefik.http.routers.krakelorakel.tls.certresolver=letencrypt
+      - traefik.http.services.krakelorakel.loadbalancer.server.port=80
+networks:
+  krakelorakel-network:
+    driver: bridge
+  dockge-nginx_default:
+    external: true
+  dockge-nginx_dockge-nginx:
+    external: true
+volumes:
+  boards-data:
+    driver: local

@@ -1,5 +1,5 @@
 services:
-  backend:
+  krakelorakel-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -8,8 +8,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      - FRONTEND_URL=http://frontend:80
-      - BACKEND_URL=http://backend:5000
+      - FRONTEND_URL=http://krakelorakel-frontend:80
+      - BACKEND_URL=http://krakelorakel-backend:5000
       - DEBUG=false
     volumes:
       - ./backend/boards:/app/boards:ro
@@ -23,7 +23,7 @@ services:
       retries: 3
       start_period: 40s
 
-  frontend:
+  krakelorakel-frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -32,9 +32,9 @@ services:
       - "3000:80"  # Only frontend port exposed
     environment:
       - NODE_ENV=production
-      - BACKEND_URL=http://backend:5000
+      - BACKEND_URL=http://krakelorakel-backend:5000
     depends_on:
-      backend:
+      krakelorakel-backend:
         condition: service_healthy
     networks:
       - krakelorakel-network
