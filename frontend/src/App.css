@@ -1207,6 +1207,41 @@
   font-weight: 500;
 }
 
+.room-info-display.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+}
+
+.room-info-display.clickable:hover {
+  background: #e9ecef;
+  border-color: #0066cc;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.2);
+}
+
+.room-info-display.clickable:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 102, 204, 0.2);
+}
+
+.copied-message {
+  color: #28a745;
+  font-weight: 600;
+  font-size: 12px;
+  margin-left: 8px;
+  animation: fadeInOut 2s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-5px); }
+  20% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-5px); }
+}
+
 .info-icon {
   font-size: 16px;
 }

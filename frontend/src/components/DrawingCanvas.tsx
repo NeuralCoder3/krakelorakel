@@ -43,6 +43,39 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   const [currentPlayerTurn, setCurrentPlayerTurn] = useState<any>(null)
   const [votedWords, setVotedWords] = useState<string[]>([])
   const [votingComplete, setVotingComplete] = useState<any>(null)
+  const [showCopiedMessage, setShowCopiedMessage] = useState(false)
+
+  // Check for room code in URL parameters on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const roomCodeFromUrl = urlParams.get('room')
+    if (roomCodeFromUrl) {
+      setRoomCode(roomCodeFromUrl.toUpperCase())
+    }
+  }, [])
+
+  // Function to copy room URL to clipboard
+  const copyRoomUrl = async () => {
+    const roomUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`
+    try {
+      await navigator.clipboard.writeText(roomUrl)
+      setShowCopiedMessage(true)
+      setTimeout(() => setShowCopiedMessage(false), 2000) // Hide after 2 seconds
+      console.log('Room URL copied to clipboard:', roomUrl)
+    } catch (err) {
+      console.error('Failed to copy room URL:', err)
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea')
+      textArea.value = roomUrl
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setShowCopiedMessage(true)
+      setTimeout(() => setShowCopiedMessage(false), 2000) // Hide after 2 seconds
+      console.log('Room URL copied to clipboard (fallback):', roomUrl)
+    }
+  }
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -633,7 +666,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
               className="name-input"
-              maxLength={6}
+              title="Enter a room code to join or create a game."
             />
             <button
               className="join-button"
@@ -652,7 +685,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
               Join Game
             </button>
           </div>
-          <p className="room-info">Enter a room code to join or create a game. Room codes are 3-6 characters long.</p>
+          <p className="room-info">Enter a room code to join or create a game.</p>
         </div>
       )}
 
@@ -710,9 +743,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
           
           {/* Room and Player Info */}
           <div className="room-player-info">
-            <div className="room-info-display">
+            <div className="room-info-display clickable" onClick={copyRoomUrl} title={`Click to copy room URL: ${window.location.origin}${window.location.pathname}?room=${currentRoom}`}>
               <span className="info-icon">🏠</span>
               <span className="info-text">Room: {currentRoom}</span>
+              {showCopiedMessage && <span className="copied-message">✓ Copied!</span>}
             </div>
             <div className="player-info-display">
               <span className="info-icon">👤</span>
