@@ -16,35 +16,38 @@ services:
     networks:
       - krakelorakel-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # healthcheck:
+    #   test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
 
   krakelorakel-frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: krakelorakel-frontend
     ports:
       - "3000:80"  # Only frontend port exposed
     environment:
       - NODE_ENV=production
       - BACKEND_URL=http://krakelorakel-backend:5000
+    volumes:
+      - ./backend/boards:/usr/share/nginx/html/boards:ro
     depends_on:
-      krakelorakel-backend:
-        condition: service_healthy
+      - krakelorakel-backend
+      # krakelorakel-backend:
+      #   condition: service_healthy
     networks:
       - krakelorakel-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # healthcheck:
+    #   test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
 
 networks:
   krakelorakel-network:

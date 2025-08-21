@@ -14,17 +14,17 @@ services:
       - FRONTEND_URL=http://krakelorakel-frontend:80
       - BACKEND_URL=http://krakelorakel-backend:5000
       - DEBUG=false
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "require('http').get('http://localhost:5000/health', (res) => {
-          process.exit(res.statusCode === 200 ? 0 : 1) })"
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # healthcheck:
+    #   test:
+    #     - CMD
+    #     - node
+    #     - -e
+    #     - "require('http').get('http://localhost:5000/health', (res) => {
+    #       process.exit(res.statusCode === 200 ? 0 : 1) })"
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
   krakelorakel-frontend:
     container_name: krakelorakel-frontend
     restart: unless-stopped
@@ -39,20 +39,21 @@ services:
     ports:
       - 3000:80
     depends_on:
-      krakelorakel-backend:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - --no-verbose
-        - --tries=1
-        - --spider
-        - http://localhost:80/
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - krakelorakel-backend
+      # krakelorakel-backend:
+      #   condition: service_healthy
+    # healthcheck:
+    #   test:
+    #     - CMD
+    #     - wget
+    #     - --no-verbose
+    #     - --tries=1
+    #     - --spider
+    #     - http://localhost:80/
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
     labels:
       - traefik.enable=true
       - traefik.http.routers.krakelorakel.rule=Host(`krakelorakel.neuralcoder.de`)

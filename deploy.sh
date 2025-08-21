@@ -67,7 +67,7 @@ build_frontend() {
     docker image prune -f > /dev/null 2>&1 || true
     
     # Build the frontend image
-    if docker build -f frontend/Dockerfile -t ${DOCKER_NAMESPACE}/${FRONTEND_IMAGE}:${VERSION} .; then
+    if docker build -f frontend/Dockerfile -t ${DOCKER_NAMESPACE}/${FRONTEND_IMAGE}:${VERSION} ./frontend; then
         log_success "Frontend container built successfully"
     else
         log_error "Failed to build frontend container"
