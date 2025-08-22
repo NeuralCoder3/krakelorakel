@@ -24,5 +24,25 @@ The unique aspect of KrakelOrakel is that
 
 ## Game Play
 
+1. Visit the website
+1. Enter a username and room code of your choice
+1. Wait for others to join, you can click on the room to get a sharable room-link (https://[URL]/?room=[CODE])
+1. Once everyone joined, begin to draw (you may rotate the canvas)
+1. Submit your image
+1. Vote one after the other for the words
+
+<img src="readme/screenshot_1.png" width="400px">
+<img src="readme/screenshot_2.png" width="400px">
+<img src="readme/screenshot_3.png" width="400px">
+<img src="readme/screenshot_4.png" width="400px">
+<img src="readme/screenshot_5.png" width="400px">
+
 
 ## Installation
+
+The repository is a normal node application.
+The backend runs on express, the frontend is a react application.
+
+Locally, you can develop with `npm run dev`.
+For production, the easiest way are the provided Docker containers.
+Expose the frontend port 80 to access the website.
