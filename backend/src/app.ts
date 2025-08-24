@@ -8,7 +8,7 @@ import multer from 'multer';
 import fs from 'fs';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { gameRouter } from './routes/game';
+
 
 // Load environment variables
 dotenv.config();
@@ -571,7 +571,6 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/game', gameRouter);
 
 // Image upload endpoint
 app.post('/api/upload-board', upload.single('boardImage'), (req, res) => {

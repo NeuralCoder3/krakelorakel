@@ -5,6 +5,9 @@ interface DrawingCanvasProps {}
 
 const DEBUG = false;
 
+// Backend URL - use the Vite proxy in development (empty string), or full URL in production
+const BACKEND_URL = '';
+
 const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   // Canvas state
   const [isDrawing, setIsDrawing] = useState(false)
@@ -53,6 +56,16 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
       setRoomCode(roomCodeFromUrl.toUpperCase())
     }
   }, [])
+
+  // Function to construct full backend URL for board images
+  const getFullBoardUrl = (relativePath: string) => {
+    if (relativePath.startsWith('http')) {
+      return relativePath; // Already a full URL
+    }
+    // Remove leading slash if present and construct full URL
+    const cleanPath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+    return `${BACKEND_URL}/${cleanPath}`;
+  };
 
   // Function to copy room URL to clipboard
   const copyRoomUrl = async () => {
@@ -141,13 +154,15 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
 
     newSocket.on('wordAssigned', (data: { word: string, board: string }) => {
       setCurrentWord(data.word)
-      setBoardImageUrl(data.board)
-      console.log('Word and board assigned on join:', data.word, data.board)
+      const fullBoardUrl = getFullBoardUrl(data.board)
+      setBoardImageUrl(fullBoardUrl)
+      console.log('Word and board assigned on join:', data.word, fullBoardUrl)
     })
 
     newSocket.on('newBoard', (data: { board: string }) => {
-      setBoardImageUrl(data.board)
-      console.log('New board assigned:', data.board)
+      const fullBoardUrl = getFullBoardUrl(data.board)
+      setBoardImageUrl(fullBoardUrl)
+      console.log('New board assigned:', fullBoardUrl)
     })
 
     return () => {
@@ -192,11 +207,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = () => {
   useEffect(() => {
     if (!boardImageUrl) return // Don't load if no URL yet
     
+    console.log('Loading background image from:', boardImageUrl)
+    
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       backgroundImageRef.current = img
       setImageLoaded(true)
+      console.log('Background image loaded successfully')
     }
     img.onerror = () => {
       console.error('Failed to load background image:', boardImageUrl)
